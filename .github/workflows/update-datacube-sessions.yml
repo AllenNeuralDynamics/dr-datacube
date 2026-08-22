@@ -3,7 +3,7 @@ name: Update session IDs
 on:
   push:
     paths:
-      - src/dr_bws/datacube.py
+      - src/dr_datacube/datacube.py
       - scripts/dump_datacube_sessions.py
       - .github/workflows/update-datacube-sessions.yml
 

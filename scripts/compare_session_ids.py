@@ -1,6 +1,6 @@
 """Compare session-table filter presets with the checked-in session ID lists.
 
-The NWB session table used by :mod:`dr_bws.datacube` stores filter metadata in
+The NWB session table used by :mod:`dr_datacube.datacube` stores filter metadata in
 ``keywords``.  The consolidated parquet session table stores the same metadata
 as named columns, so the predicates below are the parquet equivalents of the
 standard presets.
@@ -33,7 +33,7 @@ def session_table_presets() -> dict[str, pl.Expr]:
     ``is_annotated`` is the consolidated-table counterpart of the CCF
     annotation keyword.  The project column distinguishes the brainwide and
     Templeton collections; the remaining columns directly correspond to the
-    keyword predicates in ``dr_bws.datacube``.
+    keyword predicates in ``dr_datacube.datacube``.
     """
 
     common = (

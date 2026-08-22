@@ -1,12 +1,12 @@
 # /// script
 # dependencies = [
-#     "dr-bws",
+#     "dr-datacube",
 #     "polars",
 # ]
 # requires-python = ">=3.11"
 #
 # [tool.uv.sources]
-# dr-bws = { git = "https://github.com/AllenNeuralDynamics/dr-bws-figures" }
+# dr-datacube = { git = "https://github.com/AllenNeuralDynamics/dr-datacube" }
 # ///
 """Write session IDs for each standard ephys preset to assets/session_ids.json."""
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import polars as pl
 
-from dr_bws import datacube
+from dr_datacube import datacube
 
 
 def session_table() -> pl.DataFrame:
