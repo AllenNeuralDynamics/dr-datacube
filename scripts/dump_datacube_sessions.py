@@ -1,6 +1,6 @@
 # /// script
 # dependencies = [
-#     "dr-datacube",
+#     "dr-datacube[co]",
 #     "polars",
 # ]
 # requires-python = ">=3.11"
