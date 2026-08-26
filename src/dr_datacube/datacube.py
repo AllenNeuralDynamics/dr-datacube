@@ -111,7 +111,7 @@ def behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
     return (
         get_lf("performance")
         .with_columns(
-            pl.col("n_contingent_rewards").gt(10).alias("is_engaged_block"),
+            pl.col("n_contingent_rewards").ge(10).alias("is_engaged_block"),
             pl.col("cross_modality_dprime").ge(block_dprime_threshold).alias("is_good_block"),
         )
         .group_by("session_id", "rewarded_modality")
@@ -122,6 +122,8 @@ def behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
         .agg(
             pl.col("is_good_block").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_vis_blocks"),
             pl.col("is_good_block").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_aud_blocks"),
+            pl.col("is_good_block").filter("is_engaged_block", pl.col("rewarded_modality") == "vis").first().alias("n_good_engaged_vis_blocks"),
+            pl.col("is_good_block").filter("is_engaged_block", pl.col("rewarded_modality") == "aud").first().alias("n_good_engaged_aud_blocks"),
             pl.col("is_engaged_block").sum().alias("n_engaged_blocks"),
         )
     ).collect()   # Added return statement
@@ -133,8 +135,8 @@ def brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
         good_behavior_session_ids = (
             behavior_summary(block_dprime_threshold=1.0)
             .filter(
-                pl.col("n_good_aud_blocks").ge(2),
-                pl.col("n_good_vis_blocks").ge(2),
+                pl.col("n_good_engaged_aud_blocks").ge(2),
+                pl.col("n_good_engaged_vis_blocks").ge(2),
             )
         )["session_id"].to_list()
     else:
