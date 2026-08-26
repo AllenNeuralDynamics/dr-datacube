@@ -1,6 +1,7 @@
 name: Update session IDs
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - src/dr_datacube/datacube.py
