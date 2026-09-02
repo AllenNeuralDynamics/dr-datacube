@@ -90,18 +90,66 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
 datacube_config = DatacubeConfig()
 
 
-def get_lf(name: str, use_cache: bool | None = None) -> pl.LazyFrame:
-    if use_cache is not None:
-        config = datacube_config.model_copy(update={"use_cache": use_cache})
+def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
+    config = datacube_config
+    if not nwb:
+        storage_options = (
+            scan_args.pop("storage_options", {})
+            if not config.use_cache
+            else {"skip_signature": "true", "region": "us-west-2"} | scan_args.pop("storage_options", {})
+        )
+        return (
+            pl.scan_parquet(
+                (config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options, **scan_args
+            )
+            .pipe(ensure_id_cols)
+        )
     else:
-        config = datacube_config
-    storage_options = {} if not config.use_cache else {"skip_signature": "true", "region": "us-west-2"}
-    return pl.scan_parquet((config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options)
+
+        def _name_to_nwb_internal_path(name: str) -> str:
+            if any(
+                name.startswith(k)
+                for k in ("performance", "optotagging", "rf_mapping", "aud_rf_mapping", "vis_rf_mapping", "epochs")
+            ):
+                name = f"intervals/{name}"
+            if any(name.endswith(k) for k in ("optotagging", "rf_mapping")):
+                name += "_trials"
+            if name.startswith("frametimes"):
+                name = f"acquisition/{name}"
+            if name in (
+                "dlc_eye_camera",
+                "eye_tracking",
+                "facemap_front_camera",
+                "facemap_side_camera",
+                "lp_front_camera",
+                "lp_side_camera",
+                "licks",
+                "running_speed",
+                "rewards",
+                "quiescent_interval_violations",
+            ):
+                name = f"processing/behavior/{name}"
+            if name == "electrodes":
+                name = "general/extracellular_ephys/electrodes"
+            return name
+
+        name = _name_to_nwb_internal_path(name)
+        try:
+            import lazynwb
+        except ImportError:
+            raise ImportError(
+                "lazynwb is required to read NWBs. Install as an optional-dependency with `dr-datacube[nwb]`."
+            )
+        if config.use_cache:
+            lazynwb.config.anon = True
+        return (
+            lazynwb.scan_nwb(list_nwb_sources(), name, **scan_args)
+            .pipe(ensure_id_cols)
+        )
 
 
-@functools.cache
 def list_nwb_sources() -> tuple[str, ...]:
-    """Get all file URIs."""
+    """Get all file URIs from data asset(s) or from scratch bucket cache, depending on current config."""
     sources = sorted(path.as_posix() for path in datacube_config.nwb_dir.glob("*.nwb*"))
     logger.info(f"Found {len(sources)} NWB sources in {datacube_config.nwb_dir}")
     return tuple(sources)
