@@ -98,12 +98,9 @@ def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
             if not config.use_cache
             else {"skip_signature": "true", "region": "us-west-2"} | scan_args.pop("storage_options", {})
         )
-        return (
-            pl.scan_parquet(
-                (config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options, **scan_args
-            )
-            .pipe(ensure_id_cols)
-        )
+        return pl.scan_parquet(
+            (config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options, **scan_args
+        ).pipe(ensure_id_cols)
     else:
 
         def _name_to_nwb_internal_path(name: str) -> str:
@@ -140,12 +137,9 @@ def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
             raise ImportError(
                 "lazynwb is required to read NWBs. Install as an optional-dependency with `dr-datacube[nwb]`."
             )
-        if config.use_cache:
+        if config.anon:
             lazynwb.config.anon = True
-        return (
-            lazynwb.scan_nwb(list_nwb_sources(), name, **scan_args)
-            .pipe(ensure_id_cols)
-        )
+        return lazynwb.scan_nwb(list_nwb_sources(), name, **scan_args).pipe(ensure_id_cols)
 
 
 def list_nwb_sources() -> tuple[str, ...]:
@@ -178,21 +172,25 @@ def behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
             pl.col("n_contingent_rewards").ge(10).alias("is_engaged_block"),
             pl.col("cross_modality_dprime").ge(block_dprime_threshold).alias("is_good_block"),
         )
+        .with_columns(
+            (pl.col("is_good_block") & pl.col("is_engaged_block")).alias("is_good_engaged_block"),
+        )
         .group_by("session_id", "rewarded_modality")
-        .agg(pl.col("is_engaged_block", "is_good_block").sum())
+        .agg(
+            "is_engaged_block",
+            "is_good_block",
+            "is_good_engaged_block",
+            pl.col("is_engaged_block", "is_good_block", "is_good_engaged_block").sum().name.replace("is_", "n_").name.suffix("s"),
+        )
         .group_by("session_id")
         .agg(
-            pl.col("is_good_block").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_vis_blocks"),
-            pl.col("is_good_block").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_aud_blocks"),
-            pl.col("is_good_block")
-            .filter("is_engaged_block", pl.col("rewarded_modality") == "vis")
-            .first()
-            .alias("n_good_engaged_vis_blocks"),
-            pl.col("is_good_block")
-            .filter("is_engaged_block", pl.col("rewarded_modality") == "aud")
-            .first()
-            .alias("n_good_engaged_aud_blocks"),
-            pl.col("is_engaged_block").sum().alias("n_engaged_blocks"),
+            pl.col("n_engaged_blocks").sum(),
+            pl.col("n_good_blocks").sum(),
+            pl.col("n_good_engaged_blocks").sum(),
+            pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_vis_blocks"),
+            pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_aud_blocks"),
+            pl.col("n_good_engaged_blocks").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_engaged_vis_blocks"),
+            pl.col("n_good_engaged_blocks").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_engaged_aud_blocks"),
         )
     ).collect()  # Added return statement
 
@@ -276,46 +274,56 @@ def filter_functions() -> dict[str, Callable[[bool], pl.Expr]]:
         "templeton": templeton_ephys_filter,
     }
 
-
-@functools.cache
-def get_sessions(
-    session_type: Literal["brainwide", "naive", "templeton"] | None = "brainwide",
+def get_session_table(
+    session_type: Literal["brainwide", "naive", "templeton"] | None = None,
     with_behavior_filter: bool = True,
     only_in_data_asset: bool = True,
-    filter_expr: pl.Expr | None = None,
 ) -> pl.DataFrame:
     """A DataFrame with 'session_id' and 'keywords'.
 
     Options:
-    'brainwide' (default) - standard brainwide survey ephys sessions
+    'brainwide' - standard brainwide survey ephys sessions
     'naive' - context naive dynamic routing ephys sessions.
     'templeton' - Templeton ephys sessions.
     None - all sessions in datacube
 
     If `with_behavior_filter` is True, a standard behavioral filter for each session type will be applied.
 
-    If a custom `filter_expr` is passed, it will be applied to the NWB "session" table, which contains keywords, session_id and subject_id for filtering. The value of `session_type` will be ignored.
-
     If only_in_data_asset is True, a further filter will be applied to return only sessions present in the CO data asset. This requires credentials to check CO and S3.
     """
-    if filter_expr is None:
-        if not session_type:
-            raise ValueError("If `filter_expr` is None, a valid `session_type` must be provided.")
-        elif session_type not in filter_functions():
-            raise ValueError(f"Unknown filter session_type. Use one of: {list(filter_functions().keys())}")
-        filter_expr = filter_functions()[session_type](with_behavior_filter)
+    session_expr = pl.lit(True) if session_type is None else pl.col("session_type").eq(session_type)
     filtered = (
         get_lf("session")
-        .pipe(ensure_id_cols)
-        .filter(filter_expr)
         .select("session_id", "subject_id", "keywords")
+        .with_columns(
+            session_type=pl.coalesce(
+                *(
+                    pl.when(func(with_behavior_filter=with_behavior_filter))
+                    .then(pl.lit(name))
+                    for name, func in filter_functions().items()
+                )
+            )
+        )
+        .with_columns(
+            is_behavior_pass=(
+                pl.when(pl.col("session_type").eq("brainwide"))
+                .then(filter_functions()["brainwide"](with_behavior_filter=True))
+                .when(pl.col("session_type").eq("naive"))
+                .then(filter_functions()["naive"](with_behavior_filter=True))
+                .when(pl.col("session_type").eq("templeton"))
+                .then(filter_functions()["templeton"](with_behavior_filter=True))
+                .when(pl.col("session_type").is_not_null())
+                .then(pl.lit(False))
+            )
+        )
+        .filter(session_expr)
+        .join(behavior_summary().lazy(), on="session_id", how="left")
         .collect()
     )
     if only_in_data_asset:
         session_ids_in_data_asset = (
-            pl.read_parquet((datacube_config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])[
-                "session_id"
-            ]
+            pl.read_parquet((datacube_config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])
+            ["session_id"]
             .sort()
             .to_list()
         )
