@@ -5,6 +5,7 @@ import os
 from collections.abc import Callable
 from typing import Literal
 
+import lazynwb
 import polars as pl
 import pydantic
 import pydantic_settings
@@ -41,7 +42,22 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
 
     version: str = "v0.0.289"
     use_cache: bool = False
-    s3_cache_dir: upath.UPath = upath.UPath("s3://aind-scratch-data/dynamic-routing/cache", anon=True)
+    anon: bool = False
+    storage_options: dict = pydantic.Field(default_factory=lambda: {"region": "us-west-2"})
+
+    @pydantic.model_validator(mode="after")
+    def set_anonymous_storage_options(self) -> "DatacubeConfig":
+        if self.anon:
+            lazynwb.config.anon = True
+            self.storage_options["skip_signature"] = "true"
+        else:
+            lazynwb.config.anon = False
+            self.storage_options.pop("skip_signature", None)
+        return self
+
+    @property
+    def s3_cache_dir(self) -> upath.UPath:
+        return upath.UPath("s3://aind-scratch-data/dynamic-routing/cache", anon=self.anon)
 
     @property
     def asset_dir(self) -> upath.UPath:
@@ -93,11 +109,7 @@ datacube_config = DatacubeConfig()
 def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
     config = datacube_config
     if not nwb:
-        storage_options = (
-            scan_args.pop("storage_options", {})
-            if not config.use_cache
-            else {"skip_signature": "true", "region": "us-west-2"} | scan_args.pop("storage_options", {})
-        )
+        storage_options = config.storage_options | scan_args.pop("storage_options", {})
         return pl.scan_parquet(
             (config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options, **scan_args
         ).pipe(ensure_id_cols)
@@ -137,8 +149,6 @@ def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
             raise ImportError(
                 "lazynwb is required to read NWBs. Install as an optional-dependency with `dr-datacube[nwb]`."
             )
-        if config.anon:
-            lazynwb.config.anon = True
         return lazynwb.scan_nwb(list_nwb_sources(), name, **scan_args).pipe(ensure_id_cols)
 
 
