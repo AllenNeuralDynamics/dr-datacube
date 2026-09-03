@@ -1,7 +1,6 @@
 # /// script
 # dependencies = [
 #     "dr-datacube[co]",
-#     "polars",
 # ]
 # requires-python = ">=3.11"
 #
@@ -14,25 +13,19 @@ from pathlib import Path
 
 import polars as pl
 
-from dr_datacube import datacube
+import dr_datacube
 
 
 def session_table() -> pl.DataFrame:
-    dfs = []
-    for session_type in datacube.filter_functions():
-        good = datacube.get_sessions(session_type).with_columns(pl.lit(True).alias("is_behavior_pass"))
-        all = datacube.get_sessions(session_type, with_behavior_filter=False)
-        dfs.extend([df.with_columns(session_type=pl.lit(session_type)) for df in (good, all)])
     df = (
-        pl.concat(dfs, how="diagonal")
-        .drop("keywords")
-        .with_columns(
-            pl.col("is_behavior_pass").fill_null(pl.lit(False)),
+        dr_datacube.get_session_table(
+            session_type=None,
+            with_behavior_filter=False,
+            only_in_data_asset=True,
         )
+        .select("subject_id", "session_id", "is_behavior_pass", "session_type")
         .sort("session_id")
     )
-    assert df["session_type"].null_count() == 0
-    assert df["is_behavior_pass"].null_count() == 0
     return df
 
 
