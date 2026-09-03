@@ -874,7 +874,7 @@ nb = [
 [package.metadata]
 requires-dist = [
     { name = "aind-session", marker = "extra == 'co'", specifier = ">=0.3.26" },
-    { name = "lazynwb", specifier = ">=1.0.0.dev3" },
+    { name = "lazynwb", specifier = ">=1.0.0.dev6" },
     { name = "marimo", marker = "extra == 'nb'" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "pydantic-settings" },
@@ -1116,10 +1116,11 @@ wheels = [
 
 [[package]]
 name = "lazynwb"
-version = "1.0.0.dev3"
+version = "1.0.0.dev6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
+    { name = "boto3" },
     { name = "dotenv" },
     { name = "h5py" },
     { name = "numcodecs" },
@@ -1135,9 +1136,9 @@ dependencies = [
     { name = "universal-pathlib" },
     { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f3/11/7436da84c3b9135fdc801a96dddee51623b130dbb89431eee67cb75a2a03/lazynwb-1.0.0.dev3.tar.gz", hash = "sha256:19e4dfa255e6fa88fe4c2d38397de29512e2d1362178b2fc7cbe9b38bfb626c3", size = 188199, upload-time = "2026-05-13T22:15:22.528Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/e1/8ea3279baa1c3a20ed4cf44f6ba033cc643ee87d57268d9aa143ab35758b/lazynwb-1.0.0.dev6.tar.gz", hash = "sha256:72e640685636be014752a3bc271044f440f2fc2c4cb32f30b97531e9c3465b3f", size = 188548, upload-time = "2026-09-03T01:41:33.565Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/9d/0209ed5dcfc5c9d90e1cd7832f8b5f73c048ecf48222c55f15ff1b20e114/lazynwb-1.0.0.dev3-py3-none-any.whl", hash = "sha256:764a8b93920e66a56d6fe9b22c5670732571ccb56e7e34a215ad47a3bb3bf68f", size = 145617, upload-time = "2026-05-13T22:15:21.191Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/ec/54d428b0d541c6fb38d1f9beacf3c0956fc335395cc35478b779a7310921/lazynwb-1.0.0.dev6-py3-none-any.whl", hash = "sha256:133558f254d455d3d65f6c821a0794af8e335f50fad7f9066ca2746014841473", size = 145545, upload-time = "2026-09-03T01:41:32.223Z" },
 ]
 
 [[package]]

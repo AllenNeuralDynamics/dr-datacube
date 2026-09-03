@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "lazynwb>=1.0.0.dev3",
+    "lazynwb>=1.0.0.dev6",
     "polars>=1.43.2",
     "pydantic-settings",
     "universal-pathlib",
