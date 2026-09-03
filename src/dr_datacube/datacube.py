@@ -103,11 +103,10 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             return self.nwb_dir.parent / "consolidated"
 
 
-datacube_config = DatacubeConfig()
+config = DatacubeConfig()
 
 
 def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
-    config = datacube_config
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         return pl.scan_parquet(
@@ -154,8 +153,8 @@ def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
 
 def list_nwb_sources() -> tuple[str, ...]:
     """Get all file URIs from data asset(s) or from scratch bucket cache, depending on current config."""
-    sources = sorted(path.as_posix() for path in datacube_config.nwb_dir.glob("*.nwb*"))
-    logger.info(f"Found {len(sources)} NWB sources in {datacube_config.nwb_dir}")
+    sources = sorted(path.as_posix() for path in config.nwb_dir.glob("*.nwb*"))
+    logger.info(f"Found {len(sources)} NWB sources in {config.nwb_dir}")
     return tuple(sources)
 
 
@@ -332,7 +331,7 @@ def get_session_table(
     )
     if only_in_data_asset:
         session_ids_in_data_asset = (
-            pl.read_parquet((datacube_config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])
+            pl.read_parquet((config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])
             ["session_id"]
             .sort()
             .to_list()
