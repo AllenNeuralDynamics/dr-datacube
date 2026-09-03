@@ -41,6 +41,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     model_config = pydantic.ConfigDict(validate_assignment=True)
 
     version: str = "v0.0.289"
+    stream_asset: bool = False
     use_cache: bool = False
     anon: bool = False
     storage_options: dict = pydantic.Field(default_factory=lambda: {"region": "us-west-2"})
@@ -61,7 +62,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
 
     @property
     def asset_dir(self) -> upath.UPath:
-        if on_codeocean():
+        if on_codeocean() and not self.stream_asset:
             data_dir = pipeline_data_dir() if is_pipeline() else capsule_data_dir()
             try:
                 datacube_dir = tuple(data_dir.glob("dynamicrouting_datacube*"))
