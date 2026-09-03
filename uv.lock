@@ -857,6 +857,7 @@ name = "dr-datacube"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "lazynwb" },
     { name = "polars" },
     { name = "pydantic-settings" },
     { name = "universal-pathlib" },
@@ -869,20 +870,17 @@ co = [
 nb = [
     { name = "marimo" },
 ]
-nwb = [
-    { name = "lazynwb" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "aind-session", marker = "extra == 'co'", specifier = ">=0.3.26" },
-    { name = "lazynwb", marker = "extra == 'nwb'", specifier = ">=1.0.0.dev3" },
+    { name = "lazynwb", specifier = ">=1.0.0.dev3" },
     { name = "marimo", marker = "extra == 'nb'" },
     { name = "polars", specifier = ">=1.43.2" },
     { name = "pydantic-settings" },
     { name = "universal-pathlib" },
 ]
-provides-extras = ["co", "nwb", "nb"]
+provides-extras = ["co", "nb"]
 
 [[package]]
 name = "fasteners"
