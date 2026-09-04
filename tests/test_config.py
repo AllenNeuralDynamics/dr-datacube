@@ -11,7 +11,7 @@ class TestDatacubeConfigOverride(unittest.TestCase):
 
         with config.override(version="temporary", use_cache=not config.use_cache) as temporary:
             self.assertIsNot(temporary, config)
-            self.assertEqual(temporary.version, "temporary")
+            self.assertEqual(temporary.version, "vtemporary")
             self.assertEqual(temporary.use_cache, not config.use_cache)
             self.assertEqual(config.model_dump(), original)
 
@@ -20,9 +20,21 @@ class TestDatacubeConfigOverride(unittest.TestCase):
     def test_overrides_can_be_nested(self) -> None:
         with config.override(version="outer") as outer:
             with config.override(version="inner") as inner:
-                self.assertEqual(inner.version, "inner")
+                self.assertEqual(inner.version, "vinner")
                 self.assertEqual(inner.use_cache, outer.use_cache)
-            self.assertEqual(outer.version, "outer")
+            self.assertEqual(outer.version, "vouter")
+
+    def test_version_is_prefixed(self) -> None:
+        with config.override(version="0.0.289") as temporary:
+            self.assertEqual(temporary.version, "v0.0.289")
+
+        with config.override(version="v0.0.289") as temporary:
+            self.assertEqual(temporary.version, "v0.0.289")
+
+    def test_version_assignment_is_prefixed(self) -> None:
+        with config.override() as temporary:
+            temporary.version = "0.0.289"
+            self.assertEqual(temporary.version, "v0.0.289")
 
     def test_override_is_restored_after_exception(self) -> None:
         original = config.model_dump()

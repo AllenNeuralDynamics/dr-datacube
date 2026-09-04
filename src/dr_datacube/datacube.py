@@ -48,6 +48,11 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     anon: bool = False
     storage_options: dict = pydantic.Field(default_factory=lambda: {"region": "us-west-2"})
 
+    @pydantic.field_validator("version")
+    @classmethod
+    def ensure_version_prefix(cls, value: str) -> str:
+        return value if value.startswith("v") else f"v{value}"
+
     @pydantic.model_validator(mode="after")
     def set_anonymous_storage_options(self) -> "DatacubeConfig":
         if self.anon:
