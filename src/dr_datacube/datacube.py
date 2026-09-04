@@ -1,10 +1,10 @@
-import npc_session
 import contextlib
 import functools
 import logging
 import os
-from collections.abc import Callable
-from typing import Literal
+from collections.abc import Callable, Iterator
+from contextvars import ContextVar
+from typing import Any, Literal
 
 import lazynwb
 import npc_session
@@ -105,8 +105,32 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
         else:
             return self.nwb_dir.parent / "consolidated"
 
+    def override(self, **overrides: Any) -> contextlib.AbstractContextManager["DatacubeConfig"]:
+        """Temporarily use a copy of this config without changing this object."""
+        base = _get_config() if self is config else self
+        return _temporary_config(base, overrides)
+
 
 config = DatacubeConfig()
+_active_config: ContextVar[DatacubeConfig | None] = ContextVar("dr_datacube_config", default=None)
+
+
+def _get_config() -> DatacubeConfig:
+    """Return the config active in the current context, or the global config."""
+    active_config = _active_config.get()
+    return config if active_config is None else active_config
+
+
+@contextlib.contextmanager
+def _temporary_config(base: DatacubeConfig, overrides: dict[str, Any]) -> Iterator[DatacubeConfig]:
+    previous_anon = lazynwb.config.anon
+    temporary_config = DatacubeConfig(**{**base.model_dump(), **overrides})
+    token = _active_config.set(temporary_config)
+    try:
+        yield temporary_config
+    finally:
+        _active_config.reset(token)
+        lazynwb.config.anon = previous_anon
 
 
 def get_lf(
@@ -115,12 +139,13 @@ def get_lf(
     nwb: bool = False, 
     **scan_args,
 ) -> pl.LazyFrame:
+    config = _get_config()
     if session_id:
         session_id = npc_session.extract_session_id(session_id)
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         if "units" in name and session_id is not None and not config.use_cache:
-            logger.warning(f"Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`")
+            logger.warning("Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`")
         if "units" in name and session_id is not None and config.use_cache:
             logger.info(f"Fetching single session full units table for session_id={session_id}")
             path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
@@ -185,6 +210,7 @@ def get_lf(
 
 def list_nwb_sources() -> tuple[str, ...]:
     """Get all file URIs from data asset(s) or from scratch bucket cache, depending on current config."""
+    config = _get_config()
     sources = sorted(path.as_posix() for path in config.nwb_dir.glob("*.nwb*"))
     logger.info(f"Found {len(sources)} NWB sources in {config.nwb_dir}")
     return tuple(sources)
@@ -332,6 +358,7 @@ def get_session_table(
 
     If only_in_data_asset is True, a further filter will be applied to return only sessions present in the CO data asset. This requires credentials to check CO and S3.
     """
+    config = _get_config()
     session_expr = pl.lit(True) if session_type is None else pl.col("session_type").eq(session_type)
     filtered = (
         get_lf("session")

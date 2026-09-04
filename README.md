@@ -37,3 +37,19 @@ from dr_datacube import get_session_ids_from_github
 good_session_ids = get_session_ids_from_github("brainwide")
 all_session_ids = get_session_ids_from_github("brainwide", with_behavior_filter=False)
 ```
+
+
+### Temporary configuration
+
+Use `config.override(...)` when an operation needs different settings without
+changing the module-level `config`. The temporary configuration is restored
+when the context exits, including when an exception is raised:
+
+```python
+from dr_datacube import config, get_lf
+
+with config.override(version="v0.0.289", use_cache=True):
+    units = get_lf("units")
+```
+
+Contexts can be nested.
