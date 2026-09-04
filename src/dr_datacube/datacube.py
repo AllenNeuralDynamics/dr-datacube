@@ -1,3 +1,4 @@
+import npc_session
 import contextlib
 import functools
 import logging
@@ -6,6 +7,7 @@ from collections.abc import Callable
 from typing import Literal
 
 import lazynwb
+import npc_session
 import polars as pl
 import pydantic
 import pydantic_settings
@@ -107,12 +109,33 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
 config = DatacubeConfig()
 
 
-def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
+def get_lf(
+    name: str, 
+    session_id: str | None = None,
+    nwb: bool = False, 
+    **scan_args,
+) -> pl.LazyFrame:
+    if session_id:
+        session_id = npc_session.extract_session_id(session_id)
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
-        return pl.scan_parquet(
-            (config.parquet_dir / f"{name}.parquet").as_posix(), storage_options=storage_options, **scan_args
-        ).pipe(ensure_id_cols)
+        if "units" in name and session_id is not None:
+            logger.info(f"Fetching single session full units table for session_id={session_id}")
+            path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
+            session_filter = pl.lit(True)
+        else:
+            path = config.parquet_dir / f"{name}.parquet"
+            logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
+            session_filter = pl.col("session_id").eq(session_id) if session_id is not None else pl.lit(True)
+        return (
+            pl.scan_parquet(
+                path.as_posix(), 
+                storage_options=storage_options, 
+                **scan_args,
+            )
+            .pipe(ensure_id_cols)
+            .filter(session_filter)
+        )
     else:
 
         def _name_to_nwb_internal_path(name: str) -> str:
@@ -149,7 +172,13 @@ def get_lf(name: str, nwb: bool = False, **scan_args) -> pl.LazyFrame:
             raise ImportError(
                 "lazynwb is required to read NWBs. Install as an optional-dependency with `dr-datacube[nwb]`."
             )
-        return lazynwb.scan_nwb(list_nwb_sources(), name, **scan_args).pipe(ensure_id_cols)
+        if session_id is not None:
+            sources = (config.nwb_dir / f"{session_id}.nwb").as_posix()
+            logger.info(f"Fetching {name} for NWB source {sources}")
+        else:
+            sources = list_nwb_sources()
+            logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
+        return lazynwb.scan_nwb(sources, name, **scan_args).pipe(ensure_id_cols)
 
 
 def list_nwb_sources() -> tuple[str, ...]:
@@ -363,6 +392,7 @@ def get_session_ids_from_github(
 
 
 if __name__ == "__main__":
+    get_lf("session")
     import doctest
 
     doctest.testmod()
