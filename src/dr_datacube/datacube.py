@@ -2,7 +2,7 @@ import contextlib
 import functools
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from contextvars import ContextVar
 from typing import Any, Literal
 
@@ -134,9 +134,9 @@ def _temporary_config(base: DatacubeConfig, overrides: dict[str, Any]) -> Iterat
 
 
 def get_lf(
-    name: str, 
+    name: str,
     session_id: str | None = None,
-    nwb: bool = False, 
+    nwb: bool = False,
     **scan_args,
 ) -> pl.LazyFrame:
     config = _get_config()
@@ -145,7 +145,9 @@ def get_lf(
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         if "units" in name and session_id is not None and not config.use_cache:
-            logger.warning("Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`")
+            logger.warning(
+                "Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`"
+            )
         if "units" in name and session_id is not None and config.use_cache:
             logger.info(f"Fetching single session full units table for session_id={session_id}")
             path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
@@ -156,8 +158,8 @@ def get_lf(
             session_filter = pl.col("session_id").eq(session_id) if session_id is not None else pl.lit(True)
         return (
             pl.scan_parquet(
-                path.as_posix(), 
-                storage_options=storage_options, 
+                path.as_posix(),
+                storage_options=storage_options,
                 **scan_args,
             )
             .pipe(ensure_id_cols)
@@ -247,7 +249,10 @@ def behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
             "is_engaged_block",
             "is_good_block",
             "is_good_engaged_block",
-            pl.col("is_engaged_block", "is_good_block", "is_good_engaged_block").sum().name.replace("is_", "n_").name.suffix("s"),
+            pl.col("is_engaged_block", "is_good_block", "is_good_engaged_block")
+            .sum()
+            .name.replace("is_", "n_")
+            .name.suffix("s"),
         )
         .group_by("session_id")
         .agg(
@@ -256,8 +261,14 @@ def behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
             pl.col("n_good_engaged_blocks").sum(),
             pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_vis_blocks"),
             pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_aud_blocks"),
-            pl.col("n_good_engaged_blocks").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_engaged_vis_blocks"),
-            pl.col("n_good_engaged_blocks").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_engaged_aud_blocks"),
+            pl.col("n_good_engaged_blocks")
+            .filter(pl.col("rewarded_modality") == "vis")
+            .first()
+            .alias("n_good_engaged_vis_blocks"),
+            pl.col("n_good_engaged_blocks")
+            .filter(pl.col("rewarded_modality") == "aud")
+            .first()
+            .alias("n_good_engaged_aud_blocks"),
         )
     ).collect()  # Added return statement
 
@@ -341,8 +352,11 @@ def filter_functions() -> dict[str, Callable[[bool], pl.Expr]]:
         "templeton": templeton_ephys_filter,
     }
 
+
 def get_session_table(
-    session_type: Literal["brainwide", "naive", "templeton"] | None = None,
+    session_type: Literal["brainwide", "naive", "templeton"]
+    | Collection[Literal["brainwide", "naive", "templeton"]]
+    | None = None,
     with_behavior_filter: bool = True,
     only_in_data_asset: bool = True,
 ) -> pl.DataFrame:
@@ -359,15 +373,22 @@ def get_session_table(
     If only_in_data_asset is True, a further filter will be applied to return only sessions present in the CO data asset. This requires credentials to check CO and S3.
     """
     config = _get_config()
-    session_expr = pl.lit(True) if session_type is None else pl.col("session_type").eq(session_type)
+    session_expr = (
+        pl.lit(True)
+        if session_type is None
+        else (
+            pl.col("session_type").is_in(session_type)
+            if not isinstance(session_type, str)
+            else pl.col("session_type").eq(session_type)
+        )
+    )
     filtered = (
         get_lf("session")
         .select("session_id", "subject_id", "keywords")
         .with_columns(
             session_type=pl.coalesce(
                 *(
-                    pl.when(func(with_behavior_filter=with_behavior_filter))
-                    .then(pl.lit(name))
+                    pl.when(func(with_behavior_filter=with_behavior_filter)).then(pl.lit(name))
                     for name, func in filter_functions().items()
                 )
             )
@@ -390,8 +411,9 @@ def get_session_table(
     )
     if only_in_data_asset:
         session_ids_in_data_asset = (
-            pl.read_parquet((config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])
-            ["session_id"]
+            pl.read_parquet((config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])[
+                "session_id"
+            ]
             .sort()
             .to_list()
         )
@@ -400,14 +422,14 @@ def get_session_table(
 
 
 def get_session_ids_from_github(
-    session_type: Literal["brainwide", "naive", "templeton"] | None = "brainwide",
+    session_type: Literal["brainwide", "naive", "templeton"] | Collection[Literal["brainwide", "naive", "templeton"]] | None = "brainwide",
     with_behavior_filter: bool = True,
 ) -> list[str]:
     """Return a list of session IDs for the given session type, without requiring credentials to access the CO data asset."""
     if session_type is None:
         filter_expr = pl.lit(True)
     else:
-        filter_expr = pl.col("session_type") == session_type
+        filter_expr = pl.col("session_type").is_in(session_type) if not isinstance(session_type, str) else pl.col("session_type").eq(session_type)
     if with_behavior_filter:
         filter_expr = filter_expr & pl.col("is_behavior_pass")
     return (
