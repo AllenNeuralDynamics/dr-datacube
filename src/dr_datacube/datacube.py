@@ -76,25 +76,25 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             if not datacube_dir:
                 logger.warning(f"Could not find dynamicrouting_datacube data asset in {data_dir}")
             elif len(datacube_dir) > 1:
-                choice = next((d for d in datacube_dir if self.version in d.name), datacube_dir[0])
+                choice = next((d for d in datacube_dir if self.version in d.name), None)
+                if choice is not None:
+                    logger.warning(
+                        f"Found multiple dynamicrouting_datacube data assets in {data_dir}, using: {choice} (set `dr_datacube.config.version` to change)"
+                    )
+                    return choice
                 logger.warning(
-                    f"Found multiple dynamicrouting_datacube data assets in {data_dir}, using: {choice} (set `dr_datacube.config.version` to change)"
+                    f"Found multiple dynamicrouting_datacube data assets in {data_dir}, but none match the requested version {self.version}. Set `dr_datacube.config.version` to match an available local asset to use it."
                 )
-                return choice
+                logger.warning("Falling back to streaming assets from S3.")
             elif self.version in datacube_dir[0].name:
                 return datacube_dir[0]
             else:
                 logger.warning(
-                    f"Found dynamicrouting_datacube data asset in {data_dir}, but it does not match the requested version {self.version}"
+                    f"Found dynamicrouting_datacube data asset in {data_dir}, but it does not match the requested version {self.version}. Set `dr_datacube.config.version` to match an available local asset to use it."
                 )
-                if self.disable_asset_streaming:
-                    logger.warning("Asset streaming is disabled, using the available local asset despite version mismatch.")
-                    return datacube_dir[0]
-                else:
-                    logger.warning("Falling back to streaming assets from S3. Set `dr_datacube.config.disable_asset_streaming` to True to prevent this.")
-           
+
         if self.disable_asset_streaming:
-            raise FileNotFoundError(f"No local asset directory is available and `dr_datacube.config.disable_asset_streaming` is True.")
+            raise FileNotFoundError(f"No local data asset matching {self.version} is attached and streaming has been disabled. Set `dr_datacube.config.version` to match an available local asset or set `dr_datacube.config.disable_asset_streaming` to False.")
         
         # to avoid dependencies we can hardcode S3 path for well-known assets:
         asset_paths = {
