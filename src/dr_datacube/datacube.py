@@ -43,7 +43,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     model_config = pydantic.ConfigDict(validate_assignment=True)
 
     version: str = "v0.0.289"
-    stream_asset: bool = False
+    disable_asset_streaming: bool = False
     use_cache: bool = False
     anon: bool = False
     storage_options: dict = pydantic.Field(default_factory=lambda: {"region": "us-west-2"})
@@ -64,32 +64,59 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
 
     @property
     def asset_dir(self) -> upath.UPath:
-        if on_codeocean() and not self.stream_asset:
+        if on_codeocean():
+            logger.info("Running on CodeOcean: attempting to use local data asset directory")
             data_dir = pipeline_data_dir() if is_pipeline() else capsule_data_dir()
-            try:
-                datacube_dir = tuple(data_dir.glob("dynamicrouting_datacube*"))
-            except StopIteration:
-                raise FileNotFoundError(f"Could not find dynamicrouting_datacube data asset in {data_dir}")
+            datacube_dir = tuple(data_dir.glob("dynamicrouting_datacube*"))
             if not datacube_dir:
-                raise FileNotFoundError(f"Could not find dynamicrouting_datacube data asset in {data_dir}")
-            if len(datacube_dir) > 1:
+                logger.warning(f"Could not find dynamicrouting_datacube data asset in {data_dir}")
+            elif len(datacube_dir) > 1:
                 choice = next((d for d in datacube_dir if self.version in d.name), datacube_dir[0])
                 logger.warning(
-                    f"Found multiple dynamicrouting_datacube data assets in {data_dir}, using: {choice} (set `datacube_config.version` to change)"
+                    f"Found multiple dynamicrouting_datacube data assets in {data_dir}, using: {choice} (set `dr_datacube.config.version` to change)"
                 )
                 return choice
-            return datacube_dir[0]
-        # get S3 dir of datacube asset from CO API
+            elif self.version in datacube_dir[0].name:
+                return datacube_dir[0]
+            else:
+                logger.warning(
+                    f"Found dynamicrouting_datacube data asset in {data_dir}, but it does not match the requested version {self.version}"
+                )
+                if self.disable_asset_streaming:
+                    logger.warning("Asset streaming is disabled, using the available local asset despite version mismatch.")
+                    return datacube_dir[0]
+                else:
+                    logger.warning("Falling back to streaming assets from S3. Set `dr_datacube.config.disable_asset_streaming` to True to prevent this.")
+           
+        if self.disable_asset_streaming:
+            raise FileNotFoundError(f"No local asset directory is available and `dr_datacube.config.disable_asset_streaming` is True.")
+        
+        # to avoid dependencies we can hardcode S3 path for well-known assets:
+        asset_paths = {
+            "v0.0.272": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/bfaffa07-a179-4f02-9724-4e51451d8ba6",
+            "v0.0.288.naive": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/e8468ee4-9825-4254-b374-fb0b9dab160a",
+            "v0.0.289": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/4491d1c4-400c-4e76-b81a-c437478f188b",
+        }
+        if self.version in asset_paths:
+            return upath.UPath(asset_paths[self.version], anon=self.anon)
+
+        # get S3 dir of datacube asset from CO API:
+        # TODO replace with docdb query when possible
         try:
             import aind_session
         except ImportError:
             raise ImportError(
                 "aind_session and a CO_API_TOKEN are required to find the datacube data asset on S3. Install as an optional-dependency with `dr-datacube[co]`."
             )
-        return aind_session.get_data_asset_source_dir(
-            next(
-                d for d in reversed(aind_session.get_data_assets("dynamicrouting_datacube")) if self.version in d.name
-            ).id
+        return upath.UPath(
+            aind_session.get_data_asset_source_dir(
+                next(
+                    d
+                    for d in reversed(aind_session.get_data_assets("dynamicrouting_datacube"))
+                    if self.version in d.name
+                ).id
+            ),
+            anon=self.anon,
         )
 
     @property
@@ -422,14 +449,20 @@ def get_session_table(
 
 
 def get_session_ids_from_github(
-    session_type: Literal["brainwide", "naive", "templeton"] | Collection[Literal["brainwide", "naive", "templeton"]] | None = "brainwide",
+    session_type: Literal["brainwide", "naive", "templeton"]
+    | Collection[Literal["brainwide", "naive", "templeton"]]
+    | None = "brainwide",
     with_behavior_filter: bool = True,
 ) -> list[str]:
     """Return a list of session IDs for the given session type, without requiring credentials to access the CO data asset."""
     if session_type is None:
         filter_expr = pl.lit(True)
     else:
-        filter_expr = pl.col("session_type").is_in(session_type) if not isinstance(session_type, str) else pl.col("session_type").eq(session_type)
+        filter_expr = (
+            pl.col("session_type").is_in(session_type)
+            if not isinstance(session_type, str)
+            else pl.col("session_type").eq(session_type)
+        )
     if with_behavior_filter:
         filter_expr = filter_expr & pl.col("is_behavior_pass")
     return (
