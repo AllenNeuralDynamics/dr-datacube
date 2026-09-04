@@ -1,5 +1,43 @@
 
 
+### Loading data
+
+Use `get_lf` to read a consolidated table as a `polars.LazyFrame`; apply `.select(...)` to choose specific columns and
+`.collect()` to materialize as a `DataFrame`. 
+
+Pass `session_id` to restrict the result to one
+session, or `nwb=True` to read directly from NWB files:
+
+```python
+import polars as pl
+from dr_datacube import get_lf
+
+performance = get_lf("performance").collect()
+session_units = (
+    get_lf("units", session_id="123456_2024-01-01", nwb=True)
+    # filter to reduce the number of rows fetched:
+    .filter(
+        'is_qc_pass', 
+        pl.col('structure') == 'MOs',
+    )
+    # drop large columns that aren't needed to save time/memory:
+    .drop('spike_amplitudes', 'waveform_mean', 'waveform_std')
+    # alternatively, select the columns you need directly:
+    .select('spike_times', 'unit_id') 
+    .collect()
+)
+```
+
+Use `get_session_table` for the standard session sets. By default it applies
+the behavior filter and keeps only sessions in the configured data asset:
+
+```python
+from dr_datacube import get_session_table
+
+brainwide = get_session_table(["brainwide", "templeton"])
+all_sessions = get_session_table(None, with_behavior_filter=False)
+```
+
 ### Datacube session IDs
 A list of standard ephys sets is published in
 [`assets/datacube_sessions.csv`](assets/datacube_sessions.csv). The table contains the session and
@@ -35,21 +73,47 @@ This package also provides a convenience function to get the list of session IDs
 from dr_datacube import get_session_ids_from_github
 
 good_session_ids = get_session_ids_from_github("brainwide")
-all_session_ids = get_session_ids_from_github("brainwide", with_behavior_filter=False)
+all_session_ids = get_session_ids_from_github(["brainwide", "templeton"], with_behavior_filter=False)
 ```
 
+
+### Data source and configuration
+
+The datacube version and data source are controlled by `dr_datacube.config`.
+Set configuration near the top of your script or notebook before loading data:
+
+```python
+import dr_datacube
+
+dr_datacube.config.version = "v0.0.289"
+```
+
+By default, the package uses a matching local `dynamicrouting_datacube` asset
+when running on Code Ocean. If no matching local asset is available, it streams
+from the datacube asset directory on S3. The S3 asset directory is currently
+private, so credentials are required for this fallback.
+
+To stream from the public scratch-bucket cache instead, enable the cache:
+
+```python
+dr_datacube.config.use_cache = True
+```
+
+If credentials are not available, enable anonymous access as well:
+
+```python
+dr_datacube.config.anon = True
+```
 
 ### Temporary configuration
 
 Use `config.override(...)` when an operation needs different settings without
 changing the module-level `config`. The temporary configuration is restored
-when the context exits, including when an exception is raised:
+when the context exits, even if an exception is raised:
 
 ```python
 from dr_datacube import config, get_lf
 
-with config.override(version="v0.0.289", use_cache=True):
+with config.override(use_cache=True):
     units = get_lf("units")
 ```
-
-Contexts can be nested.
