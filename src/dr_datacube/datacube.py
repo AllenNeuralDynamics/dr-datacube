@@ -119,7 +119,9 @@ def get_lf(
         session_id = npc_session.extract_session_id(session_id)
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
-        if "units" in name and session_id is not None:
+        if "units" in name and session_id is not None and not config.use_cache:
+            logger.warning(f"Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`")
+        if "units" in name and session_id is not None and config.use_cache:
             logger.info(f"Fetching single session full units table for session_id={session_id}")
             path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
             session_filter = pl.lit(True)
