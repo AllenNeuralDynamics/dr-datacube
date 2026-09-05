@@ -2,6 +2,7 @@ import contextlib
 import functools
 import logging
 import os
+import re
 from collections.abc import Callable, Collection, Iterator
 from contextvars import ContextVar
 from typing import Any, Literal
@@ -76,7 +77,10 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             if not datacube_dir:
                 logger.warning(f"Could not find dynamicrouting_datacube data asset in {data_dir}")
             elif len(datacube_dir) > 1:
-                choice = next((d for d in datacube_dir if self.version in d.name), None)
+                choice = next(
+                    (d for d in datacube_dir if _asset_name_has_version(d.name, self.version)),
+                    None,
+                )
                 if choice is not None:
                     logger.warning(
                         f"Found multiple dynamicrouting_datacube data assets in {data_dir}, using: {choice} (set `dr_datacube.config.version` to change)"
@@ -86,7 +90,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
                     f"Found multiple dynamicrouting_datacube data assets in {data_dir}, but none match the requested version {self.version}. Set `dr_datacube.config.version` to match an available local asset to use it."
                 )
                 logger.warning("Falling back to streaming assets from S3.")
-            elif self.version in datacube_dir[0].name:
+            elif _asset_name_has_version(datacube_dir[0].name, self.version):
                 return datacube_dir[0]
             else:
                 logger.warning(
@@ -118,7 +122,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
                 next(
                     d
                     for d in reversed(aind_session.get_data_assets("dynamicrouting_datacube"))
-                    if self.version in d.name
+                    if _asset_name_has_version(d.name, self.version)
                 ).id
             ),
             anon=self.anon,
@@ -151,6 +155,12 @@ def _get_config() -> DatacubeConfig:
     """Return the config active in the current context, or the global config."""
     active_config = _active_config.get()
     return config if active_config is None else active_config
+
+
+def _asset_name_has_version(asset_name: str, version: str) -> bool:
+    """Return whether an asset name contains the complete requested version token."""
+    version_token = re.escape(version)
+    return re.search(rf"(?<![A-Za-z0-9.]){version_token}(?![A-Za-z0-9.])", asset_name) is not None
 
 
 @contextlib.contextmanager
