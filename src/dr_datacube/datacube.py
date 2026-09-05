@@ -41,7 +41,10 @@ def is_pipeline() -> bool:
 
 
 class DatacubeConfig(pydantic_settings.BaseSettings):
-    model_config = pydantic.ConfigDict(validate_assignment=True)
+    model_config = pydantic_settings.SettingsConfigDict(
+        env_prefix="DR_DATACUBE_",
+        validate_assignment=True,
+    )
 
     version: str = "v0.0.289"
     disable_asset_streaming: bool = False

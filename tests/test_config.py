@@ -1,4 +1,5 @@
 import asyncio
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,6 +56,28 @@ class TestDatacubeConfigOverride(unittest.TestCase):
 
         self.assertEqual(config.model_dump(), original)
         self.assertEqual(resolved_lazynwb_anon(), original_anon)
+
+    def test_generic_environment_variables_are_ignored(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"VERSION": "1.2.3", "USE_CACHE": "not-a-boolean"},
+            clear=True,
+        ):
+            temporary = DatacubeConfig()
+
+        self.assertEqual(temporary.version, "v0.0.289")
+        self.assertFalse(temporary.use_cache)
+
+    def test_namespaced_environment_variables_are_used(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"DR_DATACUBE_VERSION": "1.2.3", "DR_DATACUBE_USE_CACHE": "true"},
+            clear=True,
+        ):
+            temporary = DatacubeConfig()
+
+        self.assertEqual(temporary.version, "v1.2.3")
+        self.assertTrue(temporary.use_cache)
 
     def test_similar_local_asset_version_is_not_selected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
