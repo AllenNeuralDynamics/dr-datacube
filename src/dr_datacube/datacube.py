@@ -57,10 +57,8 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     @pydantic.model_validator(mode="after")
     def set_anonymous_storage_options(self) -> "DatacubeConfig":
         if self.anon:
-            lazynwb.config.anon = True
             self.storage_options["skip_signature"] = "true"
         else:
-            lazynwb.config.anon = False
             self.storage_options.pop("skip_signature", None)
         return self
 
@@ -157,6 +155,20 @@ def _get_config() -> DatacubeConfig:
     return config if active_config is None else active_config
 
 
+class _ContextualAnon:
+    """Resolve Lazynwb anonymous access from the active datacube config."""
+
+    def __bool__(self) -> bool:
+        return _get_config().anon
+
+
+# Lazynwb resolves this option when it opens a file, including when a LazyFrame is
+# collected after ``get_lf`` returns. Keeping the value context-aware avoids sharing
+# temporary anonymous-access settings between concurrent tasks.
+lazynwb.config.anon = None  # fallback to fsspec storage options
+lazynwb.config.fsspec_storage_options["anon"] = _ContextualAnon()
+
+
 def _asset_name_has_version(asset_name: str, version: str) -> bool:
     """Return whether an asset name contains the complete requested version token."""
     version_token = re.escape(version)
@@ -165,14 +177,12 @@ def _asset_name_has_version(asset_name: str, version: str) -> bool:
 
 @contextlib.contextmanager
 def _temporary_config(base: DatacubeConfig, overrides: dict[str, Any]) -> Iterator[DatacubeConfig]:
-    previous_anon = lazynwb.config.anon
     temporary_config = DatacubeConfig(**{**base.model_dump(), **overrides})
     token = _active_config.set(temporary_config)
     try:
         yield temporary_config
     finally:
         _active_config.reset(token)
-        lazynwb.config.anon = previous_anon
 
 
 def get_lf(
