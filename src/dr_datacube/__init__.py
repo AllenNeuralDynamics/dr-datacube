@@ -1,2 +1,5 @@
-"""Utils for the creation of figures for the Dynamic Routing Brainwide Survey paper"""
-from dr_datacube.datacube import *
+"""Utilities for accessing the Dynamic Routing datacube."""
+
+from .loading import *
+from .sessions import *
+from .settings import *

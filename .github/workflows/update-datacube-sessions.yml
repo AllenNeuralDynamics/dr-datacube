@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - src/dr_datacube/datacube.py
+      - src/dr_datacube/sessions.py
+      - src/dr_datacube/settings.py
       - scripts/dump_datacube_sessions.py
       - .github/workflows/update-datacube-sessions.yml
 

@@ -8,7 +8,7 @@ from unittest import mock
 import lazynwb
 
 from dr_datacube import config
-from dr_datacube.datacube import DatacubeConfig, _asset_name_has_version
+from dr_datacube.settings import DatacubeConfig, _asset_name_has_version
 
 
 def resolved_lazynwb_anon() -> bool:
@@ -89,10 +89,10 @@ class TestDatacubeConfigOverride(unittest.TestCase):
             )
 
             with (
-                mock.patch("dr_datacube.datacube.on_codeocean", return_value=True),
-                mock.patch("dr_datacube.datacube.is_pipeline", return_value=False),
+                mock.patch("dr_datacube.settings.on_codeocean", return_value=True),
+                mock.patch("dr_datacube.settings.is_pipeline", return_value=False),
                 mock.patch(
-                    "dr_datacube.datacube.capsule_data_dir",
+                    "dr_datacube.settings.capsule_data_dir",
                     return_value=data_dir,
                 ),
                 self.assertRaises(FileNotFoundError),
