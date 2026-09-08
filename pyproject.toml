@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "lazynwb>=1.0.0.dev6",
+    "lazynwb @ git+https://github.com/bjhardcastle/lazynwb.git@dev6",
     "npc-session>=0.1.41",
     "polars>=1.43.2",
     "pydantic-settings",

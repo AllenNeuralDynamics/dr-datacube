@@ -954,7 +954,7 @@ nb = [
 [package.metadata]
 requires-dist = [
     { name = "aind-session", marker = "extra == 'co'", specifier = ">=0.3.26" },
-    { name = "lazynwb", specifier = ">=1.0.0.dev6" },
+    { name = "lazynwb", git = "https://github.com/bjhardcastle/lazynwb.git?rev=dev6" },
     { name = "marimo", marker = "extra == 'nb'" },
     { name = "npc-session", specifier = ">=0.1.41" },
     { name = "polars", specifier = ">=1.43.2" },
@@ -1233,8 +1233,8 @@ wheels = [
 
 [[package]]
 name = "lazynwb"
-version = "1.0.0.dev6"
-source = { registry = "https://pypi.org/simple" }
+version = "1.0.0.dev8"
+source = { git = "https://github.com/bjhardcastle/lazynwb.git?rev=dev6#c8eb7776079a4d598fe2e490518e6b76e87d874a" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "boto3" },
@@ -1256,10 +1256,6 @@ dependencies = [
     { name = "universal-pathlib" },
     { name = "zarr", version = "2.18.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "zarr", version = "2.18.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/e1/8ea3279baa1c3a20ed4cf44f6ba033cc643ee87d57268d9aa143ab35758b/lazynwb-1.0.0.dev6.tar.gz", hash = "sha256:72e640685636be014752a3bc271044f440f2fc2c4cb32f30b97531e9c3465b3f", size = 188548, upload-time = "2026-09-03T01:41:33.565Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/ec/54d428b0d541c6fb38d1f9beacf3c0956fc335395cc35478b779a7310921/lazynwb-1.0.0.dev6-py3-none-any.whl", hash = "sha256:133558f254d455d3d65f6c821a0794af8e335f50fad7f9066ca2746014841473", size = 145545, upload-time = "2026-09-03T01:41:32.223Z" },
 ]
 
 [[package]]
