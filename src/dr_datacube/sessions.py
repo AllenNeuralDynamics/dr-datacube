@@ -273,6 +273,8 @@ def get_lf(
                 f"{session_id}.parquet" if session_id is not None else "*.parquet"
             )
             logger.info(f"Fetching full units table from parquet at {path.as_posix()}")
+        elif name == "unit_metrics":
+            path = config.parquet_dir / "units.parquet"
         else:
             path = config.parquet_dir / f"{name}.parquet"
             logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
