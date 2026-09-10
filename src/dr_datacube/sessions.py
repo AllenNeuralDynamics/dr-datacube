@@ -12,6 +12,10 @@ from .settings import _get_config
 logger = logging.getLogger(__name__)
 
 SessionType = Literal["brainwide", "naive", "templeton"]
+_GITHUB_SESSION_TABLE_URL = (
+    "https://raw.githubusercontent.com/AllenNeuralDynamics/dr-datacube/main/assets/datacube_sessions.csv"
+)
+_GITHUB_SESSION_TABLE: pl.DataFrame | None = None
 
 
 def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
@@ -199,7 +203,14 @@ def get_session_ids_from_github(
     session_type: SessionType | Collection[SessionType] | None = "brainwide",
     with_behavior_filter: bool = True,
 ) -> list[str]:
-    """Return session IDs from the published table without requiring Code Ocean credentials."""
+    """Return session IDs from the published table without requiring Code Ocean credentials.
+
+    The published table is cached in memory for the lifetime of the Python process.
+    """
+    global _GITHUB_SESSION_TABLE
+    if _GITHUB_SESSION_TABLE is None:
+        _GITHUB_SESSION_TABLE = pl.read_csv(_GITHUB_SESSION_TABLE_URL)
+
     if session_type is None:
         filter_expr = pl.lit(True)
     else:
@@ -210,14 +221,7 @@ def get_session_ids_from_github(
         )
     if with_behavior_filter:
         filter_expr = filter_expr & pl.col("is_behavior_pass")
-    return (
-        pl.read_csv(
-            "https://raw.githubusercontent.com/AllenNeuralDynamics/dr-datacube/main/assets/datacube_sessions.csv"
-        )
-        .filter(filter_expr)["session_id"]
-        .sort()
-        .to_list()
-    )
+    return _GITHUB_SESSION_TABLE.filter(filter_expr)["session_id"].sort().to_list()
 
 
 def get_lf(

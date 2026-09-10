@@ -1,13 +1,16 @@
 import unittest
+from unittest import mock
 
 import polars as pl
 
+import dr_datacube.sessions as sessions_module
 from dr_datacube.sessions import (
     _brainwide_ephys_filter,
     _ensure_id_cols,
     _naive_ephys_filter,
     _name_to_nwb_internal_path,
     _templeton_ephys_filter,
+    get_session_ids_from_github,
 )
 
 
@@ -39,6 +42,33 @@ class TestSessionFilters(unittest.TestCase):
         result = self.sessions.filter(_templeton_ephys_filter(with_behavior_filter=False))
 
         self.assertEqual(result["session_id"].to_list(), ["templeton"])
+
+
+class TestGetSessionIdsFromGithub(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_table = sessions_module._GITHUB_SESSION_TABLE
+        sessions_module._GITHUB_SESSION_TABLE = None
+
+    def tearDown(self) -> None:
+        sessions_module._GITHUB_SESSION_TABLE = self.original_table
+
+    @mock.patch("dr_datacube.sessions.pl.read_csv")
+    def test_caches_published_table(self, read_csv: mock.Mock) -> None:
+        read_csv.return_value = pl.DataFrame(
+            {
+                "session_type": ["brainwide", "templeton"],
+                "is_behavior_pass": [True, False],
+                "session_id": ["b", "t"],
+            }
+        )
+
+        self.assertEqual(get_session_ids_from_github("brainwide"), ["b"])
+        self.assertEqual(
+            get_session_ids_from_github("templeton", with_behavior_filter=False),
+            ["t"],
+        )
+
+        read_csv.assert_called_once_with(sessions_module._GITHUB_SESSION_TABLE_URL)
 
 
 class TestEnsureIdCols(unittest.TestCase):
