@@ -297,7 +297,7 @@ def get_lf(
             logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
         lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
         if name == "unit_metrics":
-            lf = lf.drop("spike_times", "spike_amplitudes", "obs_intervals", "waveform_mean", "waveform_std", strict=False)
+            lf = lf.drop("spike_times", "spike_amplitudes", "waveform_mean", "waveform_std", strict=False)
         return lf
 
 
