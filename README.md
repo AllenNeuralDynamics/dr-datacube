@@ -3,10 +3,25 @@
 ### Loading data
 
 Use `get_lf` to read a consolidated table as a `polars.LazyFrame`; apply `.select(...)` to choose specific columns and
-`.collect()` to materialize as a `DataFrame`. 
+`.collect()` to materialize as a `DataFrame`.
 
-Pass `session_id` to restrict the result to one
-session, or `nwb=True` to read directly from NWB files:
+Pass `session_id` to restrict the result to one session. By default, parquet
+results are restricted to behavior-passing brainwide sessions in the published
+datacube session list. Use `session_type` to select `"brainwide"`, `"naive"`, or
+`"templeton"` sessions, pass a collection to select multiple types, or pass
+`session_type=None` and `with_behavior_filter=False` to include all sessions.
+
+Pass `nwb=True` to read directly from NWB files. With `session_id`, this reads
+that session's NWB file; without it, it reads all NWB sources available from the
+configured data source. 
+
+`get_lf("units")` always loads the full units table,
+including spike times, and can be slow. Use `get_lf("unit_metrics")` for the table without spike times and other large array-like columns. The spike-inclusive
+parquet files are only available in the cache; when using the datacube asset,
+`units` is automatically read from NWB.
+
+Pass `only_in_data_asset=False` to bypass the published session list, for
+example to load another session available in the cache.
 
 ```python
 import polars as pl
@@ -14,7 +29,7 @@ from dr_datacube import get_lf
 
 performance = get_lf("performance").collect()
 session_units = (
-    get_lf("units", session_id="123456_2024-01-01", nwb=True)
+    get_lf("units", session_id="123456_2024-01-01")
     # filter to reduce the number of rows fetched:
     .filter(
         'is_qc_pass', 
@@ -26,6 +41,12 @@ session_units = (
     .select('spike_times', 'unit_id') 
     .collect()
 )
+
+# Load all behavior-passing sessions from multiple standard session sets:
+ephys = get_lf(
+    "unit_metrics",
+    session_type=["brainwide", "templeton"],
+).collect()
 ```
 
 Use `get_session_table` for the standard session sets. By default it applies

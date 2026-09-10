@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import polars as pl
@@ -10,6 +12,7 @@ from dr_datacube.sessions import (
     _naive_ephys_filter,
     _name_to_nwb_internal_path,
     _templeton_ephys_filter,
+    get_lf,
     get_session_ids_from_github,
 )
 
@@ -69,6 +72,150 @@ class TestGetSessionIdsFromGithub(unittest.TestCase):
         )
 
         read_csv.assert_called_once_with(sessions_module._GITHUB_SESSION_TABLE_URL)
+
+
+class TestGetLfUnits(unittest.TestCase):
+    session_id = "123456_2024-01-01"
+
+    @staticmethod
+    def scanned_lf() -> pl.LazyFrame:
+        return pl.DataFrame(
+            {
+                "session_id": [TestGetLfUnits.session_id],
+                "subject_id": ["123456"],
+            }
+        ).lazy()
+
+    def cache_config(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            use_cache=True,
+            parquet_dir=Path("/cache/nwb_components/v1/consolidated"),
+            storage_options={},
+        )
+
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github")
+    @mock.patch("dr_datacube.sessions.npc_session.extract_session_id")
+    @mock.patch("dr_datacube.sessions.pl.scan_parquet")
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_units_with_session_scans_only_that_parquet(
+        self,
+        get_config: mock.Mock,
+        scan_parquet: mock.Mock,
+        extract_session_id: mock.Mock,
+        get_session_ids: mock.Mock,
+    ) -> None:
+        get_config.return_value = self.cache_config()
+        scan_parquet.return_value = self.scanned_lf()
+        extract_session_id.return_value = self.session_id
+        get_session_ids.return_value = [self.session_id]
+
+        get_lf("units", session_id=self.session_id)
+
+        scan_parquet.assert_called_once_with(
+            f"/cache/nwb_components/v1/units/{self.session_id}.parquet",
+            storage_options={},
+        )
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github")
+    @mock.patch("dr_datacube.sessions.npc_session.extract_session_id")
+    @mock.patch("dr_datacube.sessions.pl.scan_parquet")
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_only_in_data_asset_false_allows_other_cached_session(
+        self,
+        get_config: mock.Mock,
+        scan_parquet: mock.Mock,
+        extract_session_id: mock.Mock,
+        get_session_ids: mock.Mock,
+    ) -> None:
+        uncatalogued_session_id = "999999_2024-01-01"
+        get_config.return_value = self.cache_config()
+        scan_parquet.return_value = pl.DataFrame(
+            {
+                "session_id": [uncatalogued_session_id],
+                "subject_id": ["999999"],
+            }
+        ).lazy()
+        extract_session_id.return_value = uncatalogued_session_id
+
+        result = get_lf(
+            "units",
+            session_id=uncatalogued_session_id,
+            only_in_data_asset=False,
+        ).collect()
+
+        get_session_ids.assert_not_called()
+        self.assertEqual(result["session_id"].to_list(), [uncatalogued_session_id])
+        scan_parquet.assert_called_once_with(
+            f"/cache/nwb_components/v1/units/{uncatalogued_session_id}.parquet",
+            storage_options={},
+        )
+
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github", return_value=[])
+    @mock.patch("dr_datacube.sessions.pl.scan_parquet")
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_units_without_session_scans_all_units_parquets(
+        self,
+        get_config: mock.Mock,
+        scan_parquet: mock.Mock,
+        _get_session_ids: mock.Mock,
+    ) -> None:
+        get_config.return_value = self.cache_config()
+        scan_parquet.return_value = self.scanned_lf()
+
+        get_lf("units")
+
+        scan_parquet.assert_called_once_with(
+            "/cache/nwb_components/v1/units/*.parquet",
+            storage_options={},
+        )
+
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github", return_value=[])
+    @mock.patch("dr_datacube.sessions.lazynwb.scan_nwb")
+    @mock.patch("dr_datacube.sessions.list_nwb_sources", return_value=("first.nwb", "second.nwb"))
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_units_falls_back_to_nwb_when_parquet_is_unavailable(
+        self,
+        get_config: mock.Mock,
+        _list_nwb_sources: mock.Mock,
+        scan_nwb: mock.Mock,
+        _get_session_ids: mock.Mock,
+    ) -> None:
+        get_config.return_value = SimpleNamespace(
+            use_cache=False,
+            nwb_dir=Path("/asset/nwb"),
+        )
+        scan_nwb.return_value = self.scanned_lf()
+
+        with self.assertLogs("dr_datacube.sessions", level="WARNING") as logs:
+            get_lf("units")
+
+        scan_nwb.assert_called_once_with(
+            ("first.nwb", "second.nwb"),
+            "units",
+            infer_schema_length=1,
+        )
+        all_logs = " ".join(logs.output)
+        self.assertIn("not available", all_logs)
+        self.assertIn("can be slow", all_logs)
+        self.assertIn("unit_metrics", all_logs)
+
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github", return_value=[])
+    @mock.patch("dr_datacube.sessions.pl.scan_parquet")
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_unit_metrics_uses_consolidated_parquet(
+        self,
+        get_config: mock.Mock,
+        scan_parquet: mock.Mock,
+        _get_session_ids: mock.Mock,
+    ) -> None:
+        get_config.return_value = self.cache_config()
+        scan_parquet.return_value = self.scanned_lf()
+
+        get_lf("unit_metrics")
+
+        scan_parquet.assert_called_once_with(
+            "/cache/nwb_components/v1/consolidated/unit_metrics.parquet",
+            storage_options={},
+        )
 
 
 class TestEnsureIdCols(unittest.TestCase):

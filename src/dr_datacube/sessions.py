@@ -230,25 +230,49 @@ def get_lf(
     nwb: bool = False,
     session_type: SessionType | Collection[SessionType] | None = "brainwide",
     with_behavior_filter: bool = True,
+    only_in_data_asset: bool = True,
     **scan_args,
 ) -> pl.LazyFrame:
+    """Return a lazily scanned datacube or NWB table.
+
+    ``units`` always refers to the full table, including spike times and other
+    large array-like columns. Use ``unit_metrics`` for the smaller consolidated
+    parquet table without spike times. Set ``only_in_data_asset=False`` to
+    bypass the published session list, for example when loading another session
+    that is present in the cache.
+    """
 
     config = _get_config()
+    session_filter = (
+        pl.col("session_id").is_in(get_session_ids_from_github(session_type, with_behavior_filter))
+        if only_in_data_asset
+        else pl.lit(True)
+    )
     if session_id:
         session_id = npc_session.extract_session_id(session_id)
-    session_ids = get_session_ids_from_github(session_type, with_behavior_filter)
-    session_filter = pl.col("session_id").is_in(session_ids)
-    if session_id is not None:
         session_filter &= pl.col("session_id").eq(session_id)
+
+    if name == "units" and not nwb and not config.use_cache:
+        logger.warning(
+            "Full units parquet files are not available in the datacube asset; fetching from NWB."
+        )
+        nwb = True
+
+    if name == "units" and nwb:
+        logger.warning(
+            "Fetching `units` includes spike times and can be slow. "
+            "Setting `infer_schema_length=1` for faster inference: set it to `None` to disable this optimization.\n"
+            "Use `get_lf('unit_metrics')` for the consolidated units table without spike times."
+        )
+        scan_args.setdefault("infer_schema_length", 1)
+
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
-        if "units" in name and session_id is not None and not config.use_cache:
-            logger.warning(
-                "Full units table with spike times, amplitudes and waveforms is not available as parquet in data asset: pass `get_lf(..., nwb=True)`"
+        if name == "units":
+            path = config.parquet_dir.parent / "units" / (
+                f"{session_id}.parquet" if session_id is not None else "*.parquet"
             )
-        if "units" in name and session_id is not None and config.use_cache:
-            logger.info(f"Fetching single session full units table for session_id={session_id}")
-            path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
+            logger.info(f"Fetching full units table from parquet at {path.as_posix()}")
         else:
             path = config.parquet_dir / f"{name}.parquet"
             logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
@@ -261,15 +285,18 @@ def get_lf(
             .pipe(_ensure_id_cols)
             .filter(session_filter)
         )
-
-    name = _name_to_nwb_internal_path(name)
-    if session_id is not None:
-        sources = (config.nwb_dir / f"{session_id}.nwb").as_posix()
-        logger.info(f"Fetching {name} for NWB source {sources}")
     else:
-        sources = list_nwb_sources()
-        logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
-    return lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
+        name = _name_to_nwb_internal_path(name)
+        if session_id is not None:
+            sources = (config.nwb_dir / f"{session_id}.nwb").as_posix()
+            logger.info(f"Fetching {name} for NWB source {sources}")
+        else:
+            sources = list_nwb_sources()
+            logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
+        lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
+        if name == "unit_metrics":
+            lf = lf.drop("spike_times", "spike_amplitudes", "obs_intervals", "waveform_mean", "waveform_std", strict=False)
+        return lf
 
 
 def _name_to_nwb_internal_path(name: str) -> str:
@@ -297,6 +324,8 @@ def _name_to_nwb_internal_path(name: str) -> str:
         name = f"processing/behavior/{name}"
     if name == "electrodes":
         name = "general/extracellular_ephys/electrodes"
+    if name == "unit_metrics":
+        name = "units"
     return name
 
 
