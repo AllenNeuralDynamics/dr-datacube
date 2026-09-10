@@ -16,7 +16,7 @@ SessionType = Literal["brainwide", "naive", "templeton"]
 
 def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
     return (
-        get_lf("performance")
+        get_lf("performance", session_type=None, with_behavior_filter=False)
         .with_columns(
             pl.col("n_contingent_rewards").ge(10).alias("is_engaged_block"),
             pl.col("cross_modality_dprime").ge(block_dprime_threshold).alias("is_good_block"),
@@ -107,7 +107,7 @@ def _templeton_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     if with_behavior_filter:
         good_behavior_session_ids = (
             (
-                get_lf("performance").filter(
+                get_lf("performance", session_type=None, with_behavior_filter=False).filter(
                     pl.col("cross_modality_dprime").is_null(),
                     pl.col("aud_dprime").ge(1.0) | pl.col("vis_dprime").ge(1.0),
                 )
@@ -157,7 +157,7 @@ def get_session_table(
         )
     )
     filtered = (
-        get_lf("session")
+        get_lf("session", session_type=None, with_behavior_filter=False)
         .select("session_id", "subject_id", "keywords")
         .with_columns(
             session_type=pl.coalesce(
@@ -224,12 +224,18 @@ def get_lf(
     name: str,
     session_id: str | None = None,
     nwb: bool = False,
+    session_type: SessionType | Collection[SessionType] | None = "brainwide",
+    with_behavior_filter: bool = True,
     **scan_args,
 ) -> pl.LazyFrame:
 
     config = _get_config()
     if session_id:
         session_id = npc_session.extract_session_id(session_id)
+    session_ids = get_session_ids_from_github(session_type, with_behavior_filter)
+    session_filter = pl.col("session_id").is_in(session_ids)
+    if session_id is not None:
+        session_filter &= pl.col("session_id").eq(session_id)
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         if "units" in name and session_id is not None and not config.use_cache:
@@ -239,11 +245,9 @@ def get_lf(
         if "units" in name and session_id is not None and config.use_cache:
             logger.info(f"Fetching single session full units table for session_id={session_id}")
             path = config.parquet_dir.parent / "units" / f"{session_id}.parquet"
-            session_filter = pl.lit(True)
         else:
             path = config.parquet_dir / f"{name}.parquet"
             logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
-            session_filter = pl.col("session_id").eq(session_id) if session_id is not None else pl.lit(True)
         return (
             pl.scan_parquet(
                 path.as_posix(),
