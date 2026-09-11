@@ -19,6 +19,7 @@ _GITHUB_SESSION_TABLE: pl.DataFrame | None = None
 
 
 def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
+    logger.info("Building behavior summary from get_lf('performance')")
     return (
         get_lf("performance", session_type=None, with_behavior_filter=False)
         .with_columns(
@@ -58,6 +59,7 @@ def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
 
 
 def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
+    logger.info("Building brainwide session filter (with_behavior_filter=%s)", with_behavior_filter)
     required = (
         "prod",
         "brainwide_survey",
@@ -86,6 +88,7 @@ def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
 
 
 def _naive_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
+    logger.info("Building naive session filter (with_behavior_filter=%s)", with_behavior_filter)
     required = ("dynamic_routing", "task", "ephys", "ccf", "context naive")
     # TODO prod should be included, but is incorrect
     # TODO switch to "context_naive" (w/underscore) when fixed in v0.0.290
@@ -106,6 +109,7 @@ def _naive_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
 
 
 def _templeton_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
+    logger.info("Building Templeton session filter (with_behavior_filter=%s)", with_behavior_filter)
     required = ("prod", "templeton", "task", "ephys", "ccf")
     excluded = ("issues",)
     if with_behavior_filter:
@@ -151,6 +155,12 @@ def get_session_table(
     configured Code Ocean data asset are returned.
     """
     config = _get_config()
+    logger.info(
+        "Loading session table (session_type=%s, with_behavior_filter=%s, only_in_data_asset=%s) via get_lf('session')",
+        session_type,
+        with_behavior_filter,
+        only_in_data_asset,
+    )
     session_expr = (
         pl.lit(True)
         if session_type is None
@@ -188,6 +198,7 @@ def get_session_table(
         .collect()
     )
     if only_in_data_asset:
+        logger.info("Filtering session table against session_table.parquet in configured data asset")
         session_ids_in_data_asset = (
             pl.read_parquet((config.asset_dir / "session_table.parquet").as_posix(), columns=["session_id"])[
                 "session_id"
@@ -209,7 +220,10 @@ def get_session_ids_from_github(
     """
     global _GITHUB_SESSION_TABLE
     if _GITHUB_SESSION_TABLE is None:
+        logger.info("Loading session catalog from GitHub: %s", _GITHUB_SESSION_TABLE_URL)
         _GITHUB_SESSION_TABLE = pl.read_csv(_GITHUB_SESSION_TABLE_URL)
+    else:
+        logger.debug("Using cached session catalog loaded from GitHub")
 
     if session_type is None:
         filter_expr = pl.lit(True)
@@ -244,14 +258,20 @@ def get_lf(
 
     config = _get_config()
 
-    session_ids = get_session_ids_from_github(session_type, with_behavior_filter)
+
+    if only_in_data_asset:
+        logger.info("get_lf(%s): restricting sessions to the published GitHub session catalog", name)
+        session_ids = get_session_ids_from_github(session_type, with_behavior_filter)
+    else:
+        logger.info("get_lf(%s): bypassing the published session catalog", name)
+        session_ids = []
     if session_id:
         session_id = npc_session.extract_session_id(session_id)
         if session_id not in session_ids and only_in_data_asset:
             raise ValueError(f"{session_id} is not in the session list ({session_type=}, {with_behavior_filter=}).")
         session_ids = [session_id]
 
-    session_filter = pl.col("session_id").is_in(session_ids)
+    session_filter = pl.col("session_id").is_in(session_ids) if session_ids else pl.lit(True)
     if name == "units" and not nwb and not config.use_cache:
         logger.warning("Full units parquet files are not available in the datacube asset; fetching from NWB.")
         nwb = True
@@ -275,10 +295,12 @@ def get_lf(
             logger.info(f"Fetching full units table from parquet at {path.as_posix()}")
         elif name == "unit_metrics":
             path = config.parquet_dir / "units.parquet"
+            logger.info("Fetching unit_metrics from consolidated parquet at %s", path)
         else:
             path = config.parquet_dir / f"{name}.parquet"
-            logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
+            logger.info("Fetching %s from consolidated parquet at %s", name, path)
         if path.exists():
+            logger.info("Using parquet data source for %s: %s", name, path)
             return (
                 pl.scan_parquet(
                     path.as_posix(),
@@ -288,16 +310,21 @@ def get_lf(
                 .pipe(_ensure_id_cols)
                 .filter(session_filter)
             )
-        logger.info(f"{path.as_posix()} does not exist: attempting to fetch from NWB.")
+        logger.info("Parquet data source for %s does not exist at %s; attempting NWB", name, path)
+    elif config.nwb_only:
+        logger.info("Parquet access disabled by config.nwb_only=True; using NWB for %s", name)
+    else:
+        logger.info("NWB explicitly requested for %s; skipping parquet", name)
+    requested_name = name
     name = _name_to_nwb_internal_path(name)
     sources = list_nwb_sources(session_ids)
     if not sources:
         raise ValueError(
             f"No NWB sources found for session_ids: {session_ids} ({session_type=}, {with_behavior_filter=})."
         )
-    logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
+    logger.info("Using NWB data source for %s (%s): %d files from %s", requested_name, name, len(sources), config.nwb_dir)
     lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
-    if name == "unit_metrics":
+    if requested_name == "unit_metrics":
         lf = lf.drop("spike_times", "spike_amplitudes", "waveform_mean", "waveform_std", strict=False)
     return lf
 
@@ -335,6 +362,11 @@ def _name_to_nwb_internal_path(name: str) -> str:
 def list_nwb_sources(session_id: str | Iterable[str] | None = None) -> tuple[str, ...]:
     """Get all file URIs from data asset(s) or from scratch bucket cache, depending on current config."""
     config = _get_config()
+    logger.info(
+        "Searching for NWB data in %s (%s)",
+        config.nwb_dir,
+        "scratch cache" if config.use_cache else "configured data asset",
+    )
     available_sources = config.nwb_dir.glob("*.nwb*")
     if session_id:
         session_ids = [session_id] if isinstance(session_id, str) else list(session_id)

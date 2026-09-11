@@ -70,7 +70,10 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     @property
     def asset_dir(self) -> upath.UPath:
         if on_codeocean():
-            logger.info("Running on CodeOcean: attempting to use local data asset directory")
+            logger.info(
+                "Resolving datacube asset for config version=%s from local Code Ocean data directories",
+                self.version,
+            )
             data_dir = _pipeline_data_dir() if is_pipeline() else _capsule_data_dir()
             datacube_dir = tuple(data_dir.glob("dynamicrouting_datacube*"))
             if not datacube_dir:
@@ -90,6 +93,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
                 )
                 logger.warning("Falling back to streaming assets from S3.")
             elif _asset_name_has_version(datacube_dir[0].name, self.version):
+                logger.info("Using local datacube data asset: %s", datacube_dir[0])
                 return datacube_dir[0]
             else:
                 logger.warning(
@@ -108,7 +112,13 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             "v0.0.289": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/4491d1c4-400c-4e76-b81a-c437478f188b",
         }
         if self.version in asset_paths:
-            return upath.UPath(asset_paths[self.version], anon=self.anon)
+            asset_dir = upath.UPath(asset_paths[self.version], anon=self.anon)
+            logger.info(
+                "Using streamed S3 datacube data asset for config version=%s: %s",
+                self.version,
+                asset_dir,
+            )
+            return asset_dir
 
         # Get the S3 directory of the datacube asset from the Code Ocean API.
         # TODO replace with docdb query when possible
@@ -118,7 +128,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             raise ImportError(
                 "aind_session and a CO_API_TOKEN are required to find the datacube data asset on S3. Install as an optional-dependency with `dr-datacube[co]`."
             )
-        return upath.UPath(
+        asset_dir = upath.UPath(
             aind_session.get_data_asset_source_dir(
                 next(
                     d
@@ -128,18 +138,32 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             ),
             anon=self.anon,
         )
+        logger.info(
+            "Using streamed Code Ocean S3 datacube data asset for config version=%s: %s",
+            self.version,
+            asset_dir,
+        )
+        return asset_dir
 
     @property
     def nwb_dir(self) -> upath.UPath:
         if self.use_cache:
-            return self.s3_cache_dir / "nwb" / self.version
-        return self.asset_dir / "nwb"
+            nwb_dir = self.s3_cache_dir / "nwb" / self.version
+            logger.info("Config selects NWB data from scratch cache: %s", nwb_dir)
+            return nwb_dir
+        nwb_dir = self.asset_dir / "nwb"
+        logger.info("Config selects NWB data from datacube asset: %s", nwb_dir)
+        return nwb_dir
 
     @property
     def parquet_dir(self) -> upath.UPath:
         if self.use_cache:
-            return self.s3_cache_dir / "nwb_components" / self.version / "consolidated"
-        return self.nwb_dir.parent / "consolidated"
+            parquet_dir = self.s3_cache_dir / "nwb_components" / self.version / "consolidated"
+            logger.info("Config selects consolidated parquet from scratch cache: %s", parquet_dir)
+            return parquet_dir
+        parquet_dir = self.nwb_dir.parent / "consolidated"
+        logger.info("Config selects consolidated parquet from datacube asset: %s", parquet_dir)
+        return parquet_dir
 
     def override(self, **overrides: Any) -> contextlib.AbstractContextManager["DatacubeConfig"]:
         """Temporarily use a copy of this config without changing this object."""
