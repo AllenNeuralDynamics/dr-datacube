@@ -9,7 +9,12 @@
 # [tool.uv.sources]
 # dr-datacube = { git = "https://github.com/AllenNeuralDynamics/dr-datacube" }
 # ///
+"""
+Usage demonstration of the Dynamic Routing datacube access package.
 
+With uv installed, you can run this notebook directly from github:
+uvx marimo edit --sandbox https://raw.githubusercontent.com/AllenNeuralDynamics/dr-datacube/refs/heads/main/notebooks/tutorial.py
+"""
 import marimo
 
 __generated_with = "0.24.0"
