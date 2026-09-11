@@ -15,7 +15,6 @@ import upath
 
 logger = logging.getLogger(__name__)
 
-
 def _pipeline_data_dir() -> upath.UPath:
     return upath.UPath("/tmp/data")
 
@@ -47,6 +46,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
     version: str = "v0.0.289"
     disable_asset_streaming: bool = False
     use_cache: bool = False
+    nwb_only: bool = False
     anon: bool = False
     storage_options: dict = pydantic.Field(default_factory=lambda: {"region": "us-west-2"})
 

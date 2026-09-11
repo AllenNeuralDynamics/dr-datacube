@@ -227,13 +227,13 @@ def get_session_ids_from_github(
 def get_lf(
     name: str,
     session_id: str | None = None,
-    nwb: bool = False,
+    nwb: bool | None = None,
     session_type: SessionType | Collection[SessionType] | None = "brainwide",
     with_behavior_filter: bool = True,
     only_in_data_asset: bool = True,
     **scan_args,
 ) -> pl.LazyFrame:
-    """Return a lazily scanned datacube or NWB table.
+    """Return a lazily scanned table, from parquet or NWB.
 
     ``units`` always refers to the full table, including spike times and other
     large array-like columns. Use ``unit_metrics`` for the smaller consolidated
@@ -264,7 +264,7 @@ def get_lf(
         )
         scan_args.setdefault("infer_schema_length", 1)
 
-    if not nwb:
+    if nwb is not True and not config.nwb_only:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         if name == "units":
             path = (
@@ -278,27 +278,28 @@ def get_lf(
         else:
             path = config.parquet_dir / f"{name}.parquet"
             logger.info(f"Fetching {name} for consolidated parquet at {path.as_posix()}")
-        return (
-            pl.scan_parquet(
-                path.as_posix(),
-                storage_options=storage_options,
-                **scan_args,
+        if path.exists():
+            return (
+                pl.scan_parquet(
+                    path.as_posix(),
+                    storage_options=storage_options,
+                    **scan_args,
+                )
+                .pipe(_ensure_id_cols)
+                .filter(session_filter)
             )
-            .pipe(_ensure_id_cols)
-            .filter(session_filter)
+        logger.info(f"{path.as_posix()} does not exist: attempting to fetch from NWB.")
+    name = _name_to_nwb_internal_path(name)
+    sources = list_nwb_sources(session_ids)
+    if not sources:
+        raise ValueError(
+            f"No NWB sources found for session_ids: {session_ids} ({session_type=}, {with_behavior_filter=})."
         )
-    else:
-        name = _name_to_nwb_internal_path(name)
-        sources = list_nwb_sources(session_ids)
-        if not sources:
-            raise ValueError(
-                f"No NWB sources found for session_ids: {session_ids} ({session_type=}, {with_behavior_filter=})."
-            )
-        logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
-        lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
-        if name == "unit_metrics":
-            lf = lf.drop("spike_times", "spike_amplitudes", "waveform_mean", "waveform_std", strict=False)
-        return lf
+    logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
+    lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
+    if name == "unit_metrics":
+        lf = lf.drop("spike_times", "spike_amplitudes", "waveform_mean", "waveform_std", strict=False)
+    return lf
 
 
 def _name_to_nwb_internal_path(name: str) -> str:
