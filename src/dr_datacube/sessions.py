@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Iterable
 from typing import Literal
 
 import lazynwb
@@ -243,19 +243,17 @@ def get_lf(
     """
 
     config = _get_config()
-    session_filter = (
-        pl.col("session_id").is_in(get_session_ids_from_github(session_type, with_behavior_filter))
-        if only_in_data_asset
-        else pl.lit(True)
-    )
+
+    session_ids = get_session_ids_from_github(session_type, with_behavior_filter)
     if session_id:
         session_id = npc_session.extract_session_id(session_id)
-        session_filter &= pl.col("session_id").eq(session_id)
+        if session_id not in session_ids and only_in_data_asset:
+            raise ValueError(f"{session_id} is not in the session list ({session_type=}, {with_behavior_filter=}).")
+        session_ids = [session_id]
 
+    session_filter = pl.col("session_id").is_in(session_ids)
     if name == "units" and not nwb and not config.use_cache:
-        logger.warning(
-            "Full units parquet files are not available in the datacube asset; fetching from NWB."
-        )
+        logger.warning("Full units parquet files are not available in the datacube asset; fetching from NWB.")
         nwb = True
 
     if name == "units" and nwb:
@@ -269,8 +267,10 @@ def get_lf(
     if not nwb:
         storage_options = config.storage_options | scan_args.pop("storage_options", {})
         if name == "units":
-            path = config.parquet_dir.parent / "units" / (
-                f"{session_id}.parquet" if session_id is not None else "*.parquet"
+            path = (
+                config.parquet_dir.parent
+                / "units"
+                / (f"{session_id}.parquet" if session_id is not None else "*.parquet")
             )
             logger.info(f"Fetching full units table from parquet at {path.as_posix()}")
         elif name == "unit_metrics":
@@ -289,12 +289,12 @@ def get_lf(
         )
     else:
         name = _name_to_nwb_internal_path(name)
-        if session_id is not None:
-            sources = (config.nwb_dir / f"{session_id}.nwb").as_posix()
-            logger.info(f"Fetching {name} for NWB source {sources}")
-        else:
-            sources = list_nwb_sources()
-            logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
+        sources = list_nwb_sources(session_ids)
+        if not sources:
+            raise ValueError(
+                f"No NWB sources found for session_ids: {session_ids} ({session_type=}, {with_behavior_filter=})."
+            )
+        logger.info(f"Fetching {name} for {len(sources)} NWB sources in {config.nwb_dir}")
         lf = lazynwb.scan_nwb(sources, name, **scan_args).pipe(_ensure_id_cols)
         if name == "unit_metrics":
             lf = lf.drop("spike_times", "spike_amplitudes", "waveform_mean", "waveform_std", strict=False)
@@ -331,10 +331,18 @@ def _name_to_nwb_internal_path(name: str) -> str:
     return name
 
 
-def list_nwb_sources() -> tuple[str, ...]:
+def list_nwb_sources(session_id: str | Iterable[str] | None = None) -> tuple[str, ...]:
     """Get all file URIs from data asset(s) or from scratch bucket cache, depending on current config."""
     config = _get_config()
-    sources = sorted(path.as_posix() for path in config.nwb_dir.glob("*.nwb*"))
+    available_sources = config.nwb_dir.glob("*.nwb*")
+    if session_id:
+        session_ids = [session_id] if isinstance(session_id, str) else list(session_id)
+    else:
+        session_ids = []
+    if session_ids:
+        sources = sorted(path.as_posix() for path in available_sources if path.stem in session_ids)
+    else:
+        sources = sorted(path.as_posix() for path in available_sources)
     logger.info(f"Found {len(sources)} NWB sources in {config.nwb_dir}")
     return tuple(sources)
 
