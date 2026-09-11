@@ -53,6 +53,22 @@ def _(dr_datacube):
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    **Configuration options**
+
+    | Option | Effect |
+    |---|---|
+    | `version` | Select the datacube version. |
+    | `use_cache` | Use the public scratch bucket (`aind-scratch-data`) for both NWB files and parquet tables. |
+    | `disable_asset_streaming` | Disable streaming the datacube asset through fsspec/boto; a matching asset must be attached locally in Code Ocean. |
+    | `anon` | Use anonymous access: AWS credentials are not required and are not used, even if available. |
+    | `nwb_only` | Disable access to parquet tables, so reads use NWB data only. |
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def _(dr_datacube, mo):
     mo.md(f"""
     **Data source for this notebook**

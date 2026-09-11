@@ -111,10 +111,20 @@ dr_datacube.config.version = "v0.0.289"
 
 By default, the package uses a matching local `dynamicrouting_datacube` asset
 when running on Code Ocean. If no matching local asset is available, it streams
-from the datacube asset directory on S3. The S3 asset directory is currently
-private, so credentials are required for this fallback.
+from the datacube asset directory on S3 through fsspec/boto. The S3 asset
+directory is currently private, so credentials are required for this fallback.
 
-To stream from the public scratch-bucket cache instead, enable the cache:
+The main configuration options are:
+
+| Option | Effect |
+|---|---|
+| `version` | Select the datacube version. |
+| `use_cache` | Use the public scratch bucket (`aind-scratch-data`) for both NWB files and parquet tables. |
+| `disable_asset_streaming` | Disable streaming the datacube asset through fsspec/boto; a matching asset must be attached locally in Code Ocean. |
+| `anon` | Use anonymous access: AWS credentials are not required and are not used, even if available. |
+| `nwb_only` | Disable access to parquet tables, so reads use NWB data only. |
+
+To use the public scratch-bucket cache instead, enable the cache:
 
 ```python
 dr_datacube.config.use_cache = True
