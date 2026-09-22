@@ -92,7 +92,7 @@ class TestDatacubeConfigOverride(unittest.TestCase):
                 mock.patch("dr_datacube.settings.on_codeocean", return_value=True),
                 mock.patch("dr_datacube.settings.is_pipeline", return_value=False),
                 mock.patch(
-                    "dr_datacube.settings.capsule_data_dir",
+                    "dr_datacube.settings._capsule_data_dir",
                     return_value=data_dir,
                 ),
                 self.assertRaises(FileNotFoundError),

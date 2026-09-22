@@ -89,6 +89,7 @@ class TestGetLfUnits(unittest.TestCase):
     def cache_config(self) -> SimpleNamespace:
         return SimpleNamespace(
             use_cache=True,
+            nwb_only=False,
             parquet_dir=Path("/cache/nwb_components/v1/consolidated"),
             storage_options={},
         )
@@ -109,7 +110,8 @@ class TestGetLfUnits(unittest.TestCase):
         extract_session_id.return_value = self.session_id
         get_session_ids.return_value = [self.session_id]
 
-        get_lf("units", session_id=self.session_id)
+        with mock.patch.object(Path, "exists", return_value=True):
+            get_lf("units", session_id=self.session_id)
 
         scan_parquet.assert_called_once_with(
             f"/cache/nwb_components/v1/units/{self.session_id}.parquet",
@@ -136,11 +138,12 @@ class TestGetLfUnits(unittest.TestCase):
         ).lazy()
         extract_session_id.return_value = uncatalogued_session_id
 
-        result = get_lf(
-            "units",
-            session_id=uncatalogued_session_id,
-            only_in_data_asset=False,
-        ).collect()
+        with mock.patch.object(Path, "exists", return_value=True):
+            result = get_lf(
+                "units",
+                session_id=uncatalogued_session_id,
+                only_in_data_asset=False,
+            ).collect()
 
         get_session_ids.assert_not_called()
         self.assertEqual(result["session_id"].to_list(), [uncatalogued_session_id])
@@ -161,7 +164,8 @@ class TestGetLfUnits(unittest.TestCase):
         get_config.return_value = self.cache_config()
         scan_parquet.return_value = self.scanned_lf()
 
-        get_lf("units")
+        with mock.patch.object(Path, "exists", return_value=True):
+            get_lf("units")
 
         scan_parquet.assert_called_once_with(
             "/cache/nwb_components/v1/units/*.parquet",
@@ -181,6 +185,7 @@ class TestGetLfUnits(unittest.TestCase):
     ) -> None:
         get_config.return_value = SimpleNamespace(
             use_cache=False,
+            nwb_only=False,
             nwb_dir=Path("/asset/nwb"),
         )
         scan_nwb.return_value = self.scanned_lf()
@@ -210,10 +215,11 @@ class TestGetLfUnits(unittest.TestCase):
         get_config.return_value = self.cache_config()
         scan_parquet.return_value = self.scanned_lf()
 
-        get_lf("unit_metrics")
+        with mock.patch.object(Path, "exists", return_value=True):
+            get_lf("unit_metrics")
 
         scan_parquet.assert_called_once_with(
-            "/cache/nwb_components/v1/consolidated/unit_metrics.parquet",
+            "/cache/nwb_components/v1/consolidated/units.parquet",
             storage_options={},
         )
 

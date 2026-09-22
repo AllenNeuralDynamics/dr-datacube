@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    paths:
+      - "src/dr_datacube/**"
+      - "tests/**"
+      - "assets/datacube_sessions.csv"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "src/dr_datacube/**"
+      - "tests/**"
+      - "assets/datacube_sessions.csv"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/test.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - run: uv sync --locked --all-extras
+
+      - name: Configure AWS credentials
+        env:
+          AWS_IAM_ROLE: ${{ vars.AWS_IAM_ROLE }}
+          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_IAM_ROLE }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Run tests
+        run: uv run --locked --all-extras python -m unittest discover -s tests -v
