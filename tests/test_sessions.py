@@ -24,7 +24,7 @@ class TestSessionFilters(unittest.TestCase):
                 "session_id": ["brainwide", "naive", "templeton", "issues"],
                 "keywords": [
                     ["prod", "brainwide_survey", "task", "ephys", "ccf"],
-                    ["dynamic_routing", "task", "ephys", "ccf", "context naive"],
+                    ["dynamic_routing", "task", "ephys", "ccf", "context_naive"],
                     ["prod", "templeton", "task", "ephys", "ccf"],
                     ["prod", "brainwide_survey", "task", "ephys", "ccf", "issues"],
                 ],

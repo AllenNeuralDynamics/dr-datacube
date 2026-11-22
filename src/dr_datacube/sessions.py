@@ -21,7 +21,7 @@ _GITHUB_SESSION_TABLE: pl.DataFrame | None = None
 def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
     logger.info("Building behavior summary from get_lf('performance')")
     return (
-        get_lf("performance", session_type=None, with_behavior_filter=False)
+        get_lf("performance", session_type=None, with_behavior_filter=False, only_in_data_asset=False)
         .with_columns(
             pl.col("n_contingent_rewards").ge(10).alias("is_engaged_block"),
             pl.col("cross_modality_dprime").ge(block_dprime_threshold).alias("is_good_block"),
@@ -66,11 +66,11 @@ def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
         "task",
         "ephys",
         "ccf",
-    )  # good_behavior is incorrect - will be fixed in v0.0.290
+    )  # behavior is filtered via performance table below, not the `good_behavior` keyword
     excluded = (
         "issues",
-        "context naive",
-    )  # context_naive (w underscore) had bug - should be mutually exclusive with bws from >=v0.0.290
+        "context_naive",
+    )  # mutually exclusive with brainwide_survey from >=v0.0.290 (keyword was "context naive" before)
     if with_behavior_filter:
         good_behavior_session_ids = (
             _behavior_summary(block_dprime_threshold=1.0).filter(
@@ -89,10 +89,11 @@ def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
 
 def _naive_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     logger.info("Building naive session filter (with_behavior_filter=%s)", with_behavior_filter)
-    required = ("dynamic_routing", "task", "ephys", "ccf", "context naive")
-    # TODO prod should be included, but is incorrect
-    # TODO switch to "context_naive" (w/underscore) when fixed in v0.0.290
-    excluded = ("issues", "templeton")  # TODO add "brainwide_survey" when fixed in v0.0.290
+    # "prod" is deliberately not required: 676909 context-naive sessions are production-quality
+    # but tracked as is_production=False (one-off), see npc_lims tracked_sessions.yaml
+    required = ("dynamic_routing", "task", "ephys", "ccf", "context_naive")
+    # "context naive" (with space) keyword was replaced by "context_naive" in >=v0.0.290
+    excluded = ("issues", "templeton", "brainwide_survey")
     if with_behavior_filter:
         engaged_session_ids = (
             _behavior_summary().filter(
@@ -115,7 +116,7 @@ def _templeton_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     if with_behavior_filter:
         good_behavior_session_ids = (
             (
-                get_lf("performance", session_type=None, with_behavior_filter=False).filter(
+                get_lf("performance", session_type=None, with_behavior_filter=False, only_in_data_asset=False).filter(
                     pl.col("cross_modality_dprime").is_null(),
                     pl.col("aud_dprime").ge(1.0) | pl.col("vis_dprime").ge(1.0),
                 )
@@ -171,7 +172,9 @@ def get_session_table(
         )
     )
     filtered = (
-        get_lf("session", session_type=None, with_behavior_filter=False)
+        # Bypass the published GitHub catalog: it is generated from this function, so
+        # using it here would drop sessions that are new in the configured data asset.
+        get_lf("session", session_type=None, with_behavior_filter=False, only_in_data_asset=False)
         .select("session_id", "subject_id", "keywords")
         .with_columns(
             session_type=pl.coalesce(
