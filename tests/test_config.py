@@ -65,7 +65,7 @@ class TestDatacubeConfigOverride(unittest.TestCase):
         ):
             temporary = DatacubeConfig()
 
-        self.assertEqual(temporary.version, "v0.0.289")
+        self.assertEqual(temporary.version, DatacubeConfig.model_fields["version"].default)
         self.assertFalse(temporary.use_cache)
 
     def test_namespaced_environment_variables_are_used(self) -> None:

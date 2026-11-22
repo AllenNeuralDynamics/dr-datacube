@@ -106,7 +106,7 @@ Set configuration near the top of your script or notebook before loading data:
 ```python
 import dr_datacube
 
-dr_datacube.config.version = "v0.0.289"
+dr_datacube.config.version = "v0.0.301"
 ```
 
 By default, the package uses a matching local `dynamicrouting_datacube` asset
