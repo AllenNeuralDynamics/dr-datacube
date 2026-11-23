@@ -1,11 +1,14 @@
 [project]
-name = "dr_datacube"
+name = "dr-datacube"
 version = "0.1.1"
-description = "Add your description here"
+description = "Access to the Dynamic Routing datacube: consolidated NWB tables as polars LazyFrames, with standard session filters."
+authors = [
+    { name = "Ben Hardcastle", email = "ben.hardcastle@alleninstitute.org" },
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "lazynwb @ git+https://github.com/bjhardcastle/lazynwb.git@dev6",
+    "lazynwb>=1.0.0",
     "npc-session>=0.1.41",
     "polars>=1.43.2",
     "pydantic-settings",
@@ -15,6 +18,45 @@ dependencies = [
 [project.optional-dependencies]
 co = ["aind-session>=0.3.26"]
 nb = ["marimo"]
+
+[project.urls]
+Repository = "https://github.com/AllenNeuralDynamics/dr-datacube"
+Issues = "https://github.com/AllenNeuralDynamics/dr-datacube/issues"
+
+[dependency-groups]
+task_runner = ["poethepoet>=0.33.1"]
+bump = ["bump-my-version>=1.1.1"]
+
+[tool.uv]
+package = true
+default-groups = ["task_runner", "bump"]
+
+[tool.bumpversion]
+tag = true
+allow_dirty = true
+commit = true
+commit_args = "-a"
+message = "Bump version: {current_version} → {new_version} [skip actions]"
+pre_commit_hooks = [
+    "uv lock --upgrade-package dr-datacube",
+    "uv build",
+    "uv publish",
+]
+post_commit_hooks = [
+    "git pull --rebase origin main",
+    "git push origin main",
+    "git push --tags",
+]
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[tool.poe.tasks]
+test = "python -m unittest discover -s tests -v"
+bump_pub_tag = "bump-my-version bump patch"
+release = ["bump_pub_tag"]
 
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]

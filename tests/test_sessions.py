@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from dr_datacube.sessions import (
     _templeton_ephys_filter,
     get_lf,
     get_session_ids_from_github,
+    get_session_table,
 )
 
 
@@ -45,6 +47,117 @@ class TestSessionFilters(unittest.TestCase):
         result = self.sessions.filter(_templeton_ephys_filter(with_behavior_filter=False))
 
         self.assertEqual(result["session_id"].to_list(), ["templeton"])
+
+
+class TestSessionsWithoutTrialsAreExcluded(unittest.TestCase):
+    """A session written without task trials must not be in the datacube session table.
+
+    npc_sessions writes a valid NWB with no trials/performance tables when the task block
+    fails a timing-validity check. Its keywords shouldn't include ``task``, but the session
+    table must not depend on that.
+    """
+
+    with_trials = "111111_2024-01-01"
+    no_trials_task_keyword = "222222_2024-01-02"  # e.g. `task` picked up from an epoch tag
+    no_trials_excluded_keyword = "333333_2024-01-03"
+    no_trials_no_keyword = "444444_2024-01-04"
+    brainwide_keywords = ["prod", "brainwide_survey", "ephys", "ccf"]
+
+    def tables(self) -> dict[str, pl.DataFrame]:
+        session_ids = [
+            self.with_trials,
+            self.no_trials_task_keyword,
+            self.no_trials_excluded_keyword,
+            self.no_trials_no_keyword,
+        ]
+        return {
+            "session": pl.DataFrame(
+                {
+                    "session_id": session_ids,
+                    "subject_id": [s.split("_")[0] for s in session_ids],
+                    "keywords": [
+                        [*self.brainwide_keywords, "task"],
+                        [*self.brainwide_keywords, "task"],
+                        [*self.brainwide_keywords, "task_excluded"],
+                        self.brainwide_keywords,
+                    ],
+                }
+            ),
+            "trials": pl.DataFrame(
+                {
+                    "session_id": [self.with_trials] * 3,
+                    "subject_id": ["111111"] * 3,
+                    "start_time": [0.0, 1.0, 2.0],
+                }
+            ),
+            "performance": pl.DataFrame(
+                {
+                    "session_id": [self.with_trials] * 4,
+                    "subject_id": ["111111"] * 4,
+                    "rewarded_modality": ["vis", "aud", "vis", "aud"],
+                    "n_contingent_rewards": [20, 20, 20, 20],
+                    "cross_modality_dprime": [2.0, 2.0, 2.0, 2.0],
+                    "vis_dprime": [2.0, 2.0, 2.0, 2.0],
+                    "aud_dprime": [2.0, 2.0, 2.0, 2.0],
+                }
+            ),
+        }
+
+    def fake_get_lf(self, name: str, *args, **kwargs) -> pl.LazyFrame:
+        return self.tables()[name].lazy()
+
+    def test_session_table_requires_trials_whatever_the_keywords(self) -> None:
+        for with_behavior_filter in (False, True):
+            with (
+                self.subTest(with_behavior_filter=with_behavior_filter),
+                mock.patch("dr_datacube.sessions.get_lf", side_effect=self.fake_get_lf),
+            ):
+                table = get_session_table(
+                    session_type=None,
+                    with_behavior_filter=with_behavior_filter,
+                    only_in_data_asset=False,
+                )
+
+                self.assertEqual(table["session_id"].to_list(), [self.with_trials])
+                self.assertEqual(table["session_type"].to_list(), ["brainwide"])
+                self.assertEqual(table["is_behavior_pass"].to_list(), [True])
+
+    def test_session_in_data_asset_without_trials_is_excluded(self) -> None:
+        # The generator of assets/datacube_sessions.csv calls get_session_table with
+        # only_in_data_asset=True: a no-trials session that's in the asset must not be listed.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.tables()["session"].select("session_id").write_parquet(
+                Path(temp_dir) / "session_table.parquet"
+            )
+            with (
+                mock.patch("dr_datacube.sessions.get_lf", side_effect=self.fake_get_lf),
+                mock.patch(
+                    "dr_datacube.sessions._get_config",
+                    return_value=SimpleNamespace(asset_dir=Path(temp_dir)),
+                ),
+            ):
+                table = get_session_table(
+                    session_type=None,
+                    with_behavior_filter=False,
+                    only_in_data_asset=True,
+                )
+
+        self.assertEqual(table["session_id"].to_list(), [self.with_trials])
+
+    @mock.patch("dr_datacube.sessions.npc_session.extract_session_id")
+    @mock.patch("dr_datacube.sessions.get_session_ids_from_github")
+    @mock.patch("dr_datacube.sessions._get_config")
+    def test_get_lf_rejects_session_missing_from_catalog(
+        self,
+        _get_config: mock.Mock,
+        get_session_ids: mock.Mock,
+        extract_session_id: mock.Mock,
+    ) -> None:
+        get_session_ids.return_value = [self.with_trials]
+        extract_session_id.return_value = self.no_trials_task_keyword
+
+        with self.assertRaisesRegex(ValueError, "not in the session list"):
+            get_lf("epochs", session_id=self.no_trials_task_keyword)
 
 
 class TestGetSessionIdsFromGithub(unittest.TestCase):

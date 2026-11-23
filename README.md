@@ -1,4 +1,10 @@
+# dr-datacube
 
+Access to the Dynamic Routing datacube.
+
+```
+pip install dr-datacube
+```
 
 ### Loading data
 

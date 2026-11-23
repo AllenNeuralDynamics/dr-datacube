@@ -58,6 +58,25 @@ def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
     ).collect()
 
 
+def _session_ids_with_trials() -> list[str]:
+    """Return the IDs of sessions that have rows in the task ``trials`` table.
+
+    A session can be written as a valid NWB without task trials (for example when its
+    task block fails a timing-validity check), whatever its ``keywords`` say: the ``task``
+    keyword can also come from an epoch tag. Presence in the trials table is the ground
+    truth for "has task trials".
+    """
+    logger.info("Finding sessions with task trials from get_lf('trials')")
+    return (
+        get_lf("trials", session_type=None, with_behavior_filter=False, only_in_data_asset=False)
+        .select("session_id")
+        .unique()
+        .collect()["session_id"]
+        .sort()
+        .to_list()
+    )
+
+
 def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     logger.info("Building brainwide session filter (with_behavior_filter=%s)", with_behavior_filter)
     required = (
@@ -150,7 +169,8 @@ def get_session_table(
     """Return sessions and their standard session-set classifications.
 
     ``session_type`` selects brainwide, naive, or Templeton sessions. Passing
-    ``None`` returns every session in the datacube. When
+    ``None`` returns every session in the datacube. Sessions without task trials
+    are never returned, whatever their keywords. When
     ``with_behavior_filter`` is true, each session type's standard behavioral
     filter is applied. When ``only_in_data_asset`` is true, only sessions in the
     configured Code Ocean data asset are returned.
@@ -176,6 +196,9 @@ def get_session_table(
         # using it here would drop sessions that are new in the configured data asset.
         get_lf("session", session_type=None, with_behavior_filter=False, only_in_data_asset=False)
         .select("session_id", "subject_id", "keywords")
+        # Sessions without task trials don't belong in the datacube. Don't rely on the
+        # `task` keyword alone for this: require rows in the trials table.
+        .filter(pl.col("session_id").is_in(_session_ids_with_trials()))
         .with_columns(
             session_type=pl.coalesce(
                 *(
