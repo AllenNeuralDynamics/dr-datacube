@@ -44,8 +44,7 @@ pre_commit_hooks = [
 ]
 post_commit_hooks = [
     "git pull --rebase origin main",
-    "git push origin main",
-    "git push --tags",
+    "git push origin main --tags",
 ]
 
 [[tool.bumpversion.files]]
