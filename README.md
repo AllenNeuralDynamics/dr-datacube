@@ -104,6 +104,24 @@ all_session_ids = get_session_ids_from_github(["brainwide", "templeton"], with_b
 ```
 
 
+### Behavior criteria
+
+The behavior filters are defined in `dr_datacube.behavior` and work on any
+`performance` table (polars or pandas, one row per block), including a single
+session's table from `npc_sessions`:
+
+| Session type | Behavior pass |
+|---|---|
+| `brainwide` | at least 2 blocks of each rewarded modality with cross-modality d' >= 1 and >= 10 contingent rewards |
+| `naive` | at least 4 blocks with >= 10 contingent rewards |
+| `templeton` | at least 1 block with visual or auditory d' >= 1 (no cross-modality d') |
+
+```python
+from dr_datacube import is_behavior_pass
+
+is_behavior_pass(session.performance[:], "brainwide")
+```
+
 ### Data source and configuration
 
 The datacube version and data source are controlled by `dr_datacube.config`.

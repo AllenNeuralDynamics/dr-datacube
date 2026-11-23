@@ -7,6 +7,7 @@ import npc_session
 import polars as pl
 from polars._typing import FrameType
 
+from .behavior import BLOCK_DPRIME_THRESHOLD, behavior_pass_expr, behavior_summary
 from .settings import _get_config
 
 logger = logging.getLogger(__name__)
@@ -18,44 +19,16 @@ _GITHUB_SESSION_TABLE_URL = (
 _GITHUB_SESSION_TABLE: pl.DataFrame | None = None
 
 
-def _behavior_summary(block_dprime_threshold: float = 1.0) -> pl.DataFrame:
+def _behavior_summary(block_dprime_threshold: float = BLOCK_DPRIME_THRESHOLD) -> pl.DataFrame:
     logger.info("Building behavior summary from get_lf('performance')")
-    return (
-        get_lf("performance", session_type=None, with_behavior_filter=False, only_in_data_asset=False)
-        .with_columns(
-            pl.col("n_contingent_rewards").ge(10).alias("is_engaged_block"),
-            pl.col("cross_modality_dprime").ge(block_dprime_threshold).alias("is_good_block"),
-        )
-        .with_columns(
-            (pl.col("is_good_block") & pl.col("is_engaged_block")).alias("is_good_engaged_block"),
-        )
-        .group_by("session_id", "rewarded_modality")
-        .agg(
-            "is_engaged_block",
-            "is_good_block",
-            "is_good_engaged_block",
-            pl.col("is_engaged_block", "is_good_block", "is_good_engaged_block")
-            .sum()
-            .name.replace("is_", "n_")
-            .name.suffix("s"),
-        )
-        .group_by("session_id")
-        .agg(
-            pl.col("n_engaged_blocks").sum(),
-            pl.col("n_good_blocks").sum(),
-            pl.col("n_good_engaged_blocks").sum(),
-            pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "vis").first().alias("n_good_vis_blocks"),
-            pl.col("n_good_blocks").filter(pl.col("rewarded_modality") == "aud").first().alias("n_good_aud_blocks"),
-            pl.col("n_good_engaged_blocks")
-            .filter(pl.col("rewarded_modality") == "vis")
-            .first()
-            .alias("n_good_engaged_vis_blocks"),
-            pl.col("n_good_engaged_blocks")
-            .filter(pl.col("rewarded_modality") == "aud")
-            .first()
-            .alias("n_good_engaged_aud_blocks"),
-        )
-    ).collect()
+    return behavior_summary(
+        get_lf("performance", session_type=None, with_behavior_filter=False, only_in_data_asset=False),
+        block_dprime_threshold=block_dprime_threshold,
+    )
+
+
+def _behavior_pass_session_ids(session_type: SessionType) -> list[str]:
+    return _behavior_summary().filter(behavior_pass_expr(session_type))["session_id"].to_list()
 
 
 def _session_ids_with_trials() -> list[str]:
@@ -91,12 +64,7 @@ def _brainwide_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
         "context_naive",
     )  # mutually exclusive with brainwide_survey from >=v0.0.290 (keyword was "context naive" before)
     if with_behavior_filter:
-        good_behavior_session_ids = (
-            _behavior_summary(block_dprime_threshold=1.0).filter(
-                pl.col("n_good_engaged_aud_blocks").ge(2),
-                pl.col("n_good_engaged_vis_blocks").ge(2),
-            )
-        )["session_id"].to_list()
+        good_behavior_session_ids = _behavior_pass_session_ids("brainwide")
     else:
         good_behavior_session_ids = []
     return pl.all_horizontal(
@@ -114,11 +82,7 @@ def _naive_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     # "context naive" (with space) keyword was replaced by "context_naive" in >=v0.0.290
     excluded = ("issues", "templeton", "brainwide_survey")
     if with_behavior_filter:
-        engaged_session_ids = (
-            _behavior_summary().filter(
-                pl.col("n_engaged_blocks").ge(4),
-            )
-        )["session_id"].to_list()
+        engaged_session_ids = _behavior_pass_session_ids("naive")
     else:
         engaged_session_ids = []
     return pl.all_horizontal(
@@ -133,16 +97,7 @@ def _templeton_ephys_filter(with_behavior_filter: bool = True) -> pl.Expr:
     required = ("prod", "templeton", "task", "ephys", "ccf")
     excluded = ("issues",)
     if with_behavior_filter:
-        good_behavior_session_ids = (
-            (
-                get_lf("performance", session_type=None, with_behavior_filter=False, only_in_data_asset=False).filter(
-                    pl.col("cross_modality_dprime").is_null(),
-                    pl.col("aud_dprime").ge(1.0) | pl.col("vis_dprime").ge(1.0),
-                )
-            )
-            .collect()["session_id"]
-            .to_list()
-        )
+        good_behavior_session_ids = _behavior_pass_session_ids("templeton")
     else:
         good_behavior_session_ids = []
     return pl.all_horizontal(
