@@ -8,10 +8,6 @@ subject_id,session_id,is_behavior_pass,session_type
 628801,628801_2022-09-19,true,templeton
 636397,636397_2022-09-26,true,templeton
 636397,636397_2022-09-27,true,templeton
-636766,636766_2023-01-23,,
-636766,636766_2023-01-24,,
-636766,636766_2023-01-25,,
-636766,636766_2023-01-26,,
 644547,644547_2022-12-05,true,templeton
 644547,644547_2022-12-06,true,templeton
 644864,644864_2023-01-30,true,brainwide
@@ -61,8 +57,6 @@ subject_id,session_id,is_behavior_pass,session_type
 670180,670180_2023-07-26,true,templeton
 670180,670180_2023-07-27,true,templeton
 670181,670181_2023-07-18,true,templeton
-670248,670248_2023-08-01,true,templeton
-670248,670248_2023-08-03,,
 674562,674562_2023-10-02,true,brainwide
 674562,674562_2023-10-03,true,brainwide
 674562,674562_2023-10-04,true,brainwide
@@ -104,7 +98,6 @@ subject_id,session_id,is_behavior_pass,session_type
 703880,703880_2024-04-18,false,brainwide
 703882,703882_2024-04-22,false,brainwide
 703882,703882_2024-04-23,false,brainwide
-703882,703882_2024-04-24,false,brainwide
 703882,703882_2024-04-25,false,brainwide
 706401,706401_2024-04-22,false,brainwide
 706401,706401_2024-04-23,true,brainwide
@@ -115,7 +108,6 @@ subject_id,session_id,is_behavior_pass,session_type
 712815,712815_2024-05-20,false,brainwide
 712815,712815_2024-05-21,true,brainwide
 712815,712815_2024-05-22,true,brainwide
-712815,712815_2024-05-23,true,brainwide
 713655,713655_2024-08-05,true,brainwide
 713655,713655_2024-08-06,true,brainwide
 713655,713655_2024-08-07,true,brainwide
@@ -134,9 +126,7 @@ subject_id,session_id,is_behavior_pass,session_type
 715710,715710_2024-07-19,true,brainwide
 726088,726088_2024-06-17,false,brainwide
 726088,726088_2024-06-18,false,brainwide
-726088,726088_2024-06-20,false,brainwide
 726088,726088_2024-06-21,false,brainwide
-728917,728917_2024-10-04,,
 733780,733780_2024-08-26,false,brainwide
 733780,733780_2024-08-29,false,brainwide
 733780,733780_2024-08-30,false,brainwide
@@ -161,8 +151,6 @@ subject_id,session_id,is_behavior_pass,session_type
 741148,741148_2024-10-16,true,brainwide
 741148,741148_2024-10-17,true,brainwide
 741148,741148_2024-10-18,true,brainwide
-741611,741611_2024-09-11,,
-741611,741611_2024-09-12,,
 742903,742903_2024-10-21,true,brainwide
 742903,742903_2024-10-22,true,brainwide
 742903,742903_2024-10-23,true,brainwide
@@ -173,6 +161,7 @@ subject_id,session_id,is_behavior_pass,session_type
 743199,743199_2024-12-06,true,brainwide
 744279,744279_2025-01-13,false,brainwide
 744279,744279_2025-01-14,false,brainwide
+744279,744279_2025-01-15,false,brainwide
 744279,744279_2025-01-16,false,brainwide
 746439,746439_2025-01-27,false,brainwide
 746439,746439_2025-01-28,false,brainwide
@@ -188,7 +177,7 @@ subject_id,session_id,is_behavior_pass,session_type
 759434,759434_2025-02-06,true,brainwide
 759434,759434_2025-02-07,true,brainwide
 761583,761583_2024-12-16,true,brainwide
-762124,762124_2024-12-02,,
+761583,761583_2024-12-17,true,brainwide
 795555,795555_2025-08-21,false,naive
 795555,795555_2025-08-22,false,naive
 795555,795555_2025-08-25,true,naive
@@ -243,8 +232,12 @@ subject_id,session_id,is_behavior_pass,session_type
 831994,831994_2025-12-18,true,naive
 835598,835598_2026-02-23,false,brainwide
 835598,835598_2026-02-24,true,brainwide
+835598,835598_2026-02-25,false,brainwide
 835598,835598_2026-02-26,false,brainwide
 835598,835598_2026-02-27,false,brainwide
+836729,836729_2026-02-16,false,naive
+836729,836729_2026-02-17,false,naive
+836729,836729_2026-02-18,false,naive
 837959,837959_2026-03-30,false,brainwide
 837959,837959_2026-03-31,false,brainwide
 837959,837959_2026-04-01,true,brainwide
@@ -254,6 +247,8 @@ subject_id,session_id,is_behavior_pass,session_type
 839146,839146_2026-05-13,true,brainwide
 839146,839146_2026-05-14,true,brainwide
 839146,839146_2026-05-15,true,brainwide
+839146,839146_2026-05-18,true,brainwide
+840160,840160_2026-04-28,false,brainwide
 840160,840160_2026-04-29,false,brainwide
 840160,840160_2026-04-30,false,brainwide
 840160,840160_2026-05-01,false,brainwide
