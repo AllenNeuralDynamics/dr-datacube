@@ -43,7 +43,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
         validate_assignment=True,
     )
 
-    version: str = "v0.0.301"
+    version: str = "v0.0.303"
     disable_asset_streaming: bool = False
     use_cache: bool = False
     nwb_only: bool = False
@@ -111,6 +111,7 @@ class DatacubeConfig(pydantic_settings.BaseSettings):
             "v0.0.288.naive": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/e8468ee4-9825-4254-b374-fb0b9dab160a",
             "v0.0.289": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/4491d1c4-400c-4e76-b81a-c437478f188b",
             "v0.0.301": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/642c3e39-e5a7-433f-a269-9f6773c24c25",
+            "v0.0.303": "s3://codeocean-s3datasetsbucket-1u41qdg42ur9/297f7680-02f3-4cf6-8bb5-1947f94544f6",
         }
         if self.version in asset_paths:
             asset_dir = upath.UPath(asset_paths[self.version], anon=self.anon)
